@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+# iCloud/Finder conflict copies ("file 2.ext")
+* 2
+* 2.*
