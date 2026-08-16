@@ -7,6 +7,7 @@
 
 # --- CLI ---
 brew "mas"                      # required for the App Store installs below
+brew "wallpaper"                # sindresorhus/macos-wallpaper CLI - osascript/System Events wallpaper setting is unreliable on Golden Gate
 cask "tailscale"                # GUI app, swap to brew "tailscale" for CLIo
 
 # --- Casks (direct download) ---

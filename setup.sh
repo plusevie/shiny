@@ -119,6 +119,8 @@ run_bundle() {
 
   # dockutil is required by the dock step; ensure it's here regardless of Brewfile.
   command -v dockutil >/dev/null 2>&1 || brew install dockutil
+  # wallpaper (sindresorhus/macos-wallpaper) is required by the wallpaper step; ensure it's here regardless of Brewfile.
+  command -v wallpaper >/dev/null 2>&1 || brew install wallpaper
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -186,15 +188,23 @@ set_wallpaper() {
   local dest="${HOME}/Pictures/${WALLPAPER_FILE}"
   cp -f "$src" "$dest"
 
-  # Sets the picture on the current space of every display. NOTE: wallpaper
-  # scripting is the fragile bit on recent macOS; if this doesn't stick across
-  # all spaces, `brew install wallpaper` and swap the line below for:
-  #     wallpaper set "$dest"
-  # Lock screen has no clean CLI — on Sequoia it follows the desktop wallpaper
-  # unless overridden in System Settings, so this normally covers it.
-  osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$dest\"" \
-    && info "Wallpaper set from ${WALLPAPER_FILE}." \
-    || warn "Could not set wallpaper via osascript — see note in set_wallpaper()."
+  # Lock screen has no clean CLI — it generally follows the desktop wallpaper
+  # unless overridden in System Settings, so this normally covers it too.
+  #
+  # Prefer the `wallpaper` CLI (installed via Brewfile) over osascript/System
+  # Events: on Golden Gate the AppleScript route needs Automation permission,
+  # applies with a noticeable delay, and can silently drop "show on all
+  # spaces" on the target desktop. Fall back to osascript if the CLI is
+  # somehow missing.
+  if command -v wallpaper >/dev/null 2>&1; then
+    wallpaper set "$dest" \
+      && info "Wallpaper set from ${WALLPAPER_FILE}." \
+      || warn "Could not set wallpaper via the wallpaper CLI."
+  else
+    osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$dest\"" \
+      && info "Wallpaper set from ${WALLPAPER_FILE}." \
+      || warn "Could not set wallpaper via osascript — see note in set_wallpaper()."
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
