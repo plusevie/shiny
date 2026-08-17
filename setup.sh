@@ -255,16 +255,67 @@ write_hosts() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Recipe — pick which steps to run
+# ─────────────────────────────────────────────────────────────────────────────
+
+STEP_IDS=(clt brew defaults wallpaper dock hostname hosts)
+STEP_LABELS=(
+  "Xcode Command Line Tools"
+  "Homebrew + Brewfile"
+  "System defaults"
+  "Wallpaper"
+  "Dock contents"
+  "Hostname"
+  "Hosts (porn/social blocklist)"
+)
+STEP_ENABLED=(1 1 1 1 1 1 1)
+
+print_recipe() {
+  info "Recipe — steps that will run:"
+  local i mark
+  for i in "${!STEP_IDS[@]}"; do
+    mark="[ ]"
+    [[ "${STEP_ENABLED[$i]}" == "1" ]] && mark="[x]"
+    printf '  %s %d) %s\n' "$mark" "$((i + 1))" "${STEP_LABELS[$i]}"
+  done
+}
+
+choose_recipe() {
+  [[ -t 0 ]] || { info "Non-interactive — running full recipe."; return; }
+  local picks p idx
+  while true; do
+    print_recipe
+    read -r -p "Toggle step numbers (space-separated), or Enter to run as shown above: " picks
+    [[ -z "$picks" ]] && break
+    for p in $picks; do
+      [[ "$p" =~ ^[0-9]+$ ]] || continue
+      idx=$((p - 1))
+      (( idx >= 0 && idx < ${#STEP_ENABLED[@]} )) || continue
+      STEP_ENABLED[$idx]=$(( 1 - STEP_ENABLED[$idx] ))
+    done
+  done
+}
+
+step_enabled() {
+  local id="$1" i
+  for i in "${!STEP_IDS[@]}"; do
+    [[ "${STEP_IDS[$i]}" == "$id" ]] && [[ "${STEP_ENABLED[$i]}" == "1" ]] && return 0
+  done
+  return 1
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Run
 # ─────────────────────────────────────────────────────────────────────────────
-install_clt
-install_brew
-run_bundle
-set_defaults
-set_wallpaper
-set_dock
-set_hostname
-write_hosts
+choose_recipe
+
+step_enabled clt      && install_clt
+step_enabled brew     && { install_brew; run_bundle; }
+step_enabled defaults && set_defaults
+step_enabled wallpaper && set_wallpaper
+step_enabled dock     && set_dock
+step_enabled hostname && set_hostname
+step_enabled hosts    && write_hosts
 
 # Apply: restart the affected UI services. Key-repeat/appearance still want a logout.
 killall Finder Dock SystemUIServer 2>/dev/null || true
