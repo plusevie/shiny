@@ -1,0 +1,490 @@
+#!/usr/bin/env bash
+#
+# shiny-apply — apply a colour theme across the rice.
+#
+#   shiny-apply <name>                  apply a theme
+#   shiny-apply -r <name>               apply, and relaunch Alfred so it picks it up
+#   shiny-apply --only <target> <name>  re-apply one target (no curtain, no other restarts)
+#   shiny-apply --list                  list themes (* = current)
+#   shiny-apply --alfred                theme list as Alfred Script Filter JSON
+#   shiny-apply --render <name> <dir>   render configs into <dir> only, touch nothing
+#   shiny-apply --warm <name>           pre-build slow assets (Helium's frosted new tab)
+#
+# Usually called through `shiny theme ...`. SHINY_TIMINGS=1 prints how long
+# each target took; SHINY_CURTAIN=0 skips the loading screen.
+#
+# A theme is <dir>/<name>/palette.sh (colour roles, see THEMES.md) + a
+# wallpaper, in ~/.config/shiny/themes (yours) or <shiny>/themes (stock).
+# Layout, blur, sizes etc. live in templates/ and are shared by every theme —
+# only colours change between themes.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SHINY_HOME="$ROOT"
+# shellcheck source=lib.sh
+source "${ROOT}/libexec/lib.sh"
+
+HELIUM_DIR="${SUPPORT_DIR}/helium-theme"
+HELIUM_PREFS="${HOME}/Library/Application Support/net.imput.helium/Default/Preferences"
+ALFRED_THEME_UID="theme.custom.shiny"
+ICON_TINT_CHANGED=0
+
+# Everything a theme touches. Each has an apply_<target>; macos runs first.
+TARGETS=(macos ghostty borders alfred fastmail sketchybar wallpaper helium beeper cider)
+# Templates rendered by --render (template:output name).
+RENDER_SET=(ghostty.conf:ghostty.conf bordersrc:bordersrc alfred.json:alfred.json helium.json:helium.json
+            beeper.css:beeper.css cider.css:cider.css sketchybar/colors.sh:sketchybar-colors.sh
+            fastmail.css:fastmail.css)
+
+list_themes() {
+  local current n d kind; current="$(current_theme)"
+  while IFS=$'\t' read -r n d; do
+    kind="stock"; [[ "$d" == "$USER_THEMES"/* ]] && kind="yours"
+    printf '%s %-16s %-28s %s\n' "$([[ "$n" == "$current" ]] && echo '*' || echo ' ')" "$n" "$(palette_get "$d" THEME_BASE)" "$kind"
+  done < <(all_themes)
+}
+
+alfred_items() {
+  local current n d wp sep=""; current="$(current_theme)"
+  printf '{"items":['
+  while IFS=$'\t' read -r n d; do
+    wp="$(palette_get "$d" WALLPAPER)"
+    printf '%s{"uid":"%s","title":"%s%s","subtitle":"%s","arg":"%s","autocomplete":"%s","icon":{"path":"%s"}}' \
+      "$sep" "$n" "$n" "$([[ "$n" == "$current" ]] && echo '  ✓')" "$(palette_get "$d" THEME_BASE)" "$n" "$n" "${d}/${wp:-wallpaper.jpg}"
+    sep=","
+  done < <(all_themes)
+  printf ']}\n'
+}
+
+quit_app() { # quit_app <app> [secs] — ask an app to quit; never blocks on its dialogs.
+  # Returns 1 if it's still running after [secs] (e.g. "downloads in progress, quit?").
+  local app="$1" secs="${2:-6}" i
+  osascript -e 'with timeout of 2 seconds' -e "tell application \"$app\" to quit" -e 'end timeout' \
+    >/dev/null 2>&1 &
+  local asker=$!
+  for ((i = 0; i < secs * 5; i++)); do app_running "$app" || { kill "$asker" 2>/dev/null; return 0; }; sleep 0.2; done
+  kill "$asker" 2>/dev/null || true
+  return 1
+}
+
+relaunch() { # relaunch <app name> — only if it's running; gives up if it won't quit
+  app_running "$1" || return 0
+  quit_app "$1" || { warn "$1 didn't quit (waiting on a dialog?) — restart it yourself to see the theme."; return 1; }
+  open -a "$1"
+}
+
+backup_unmanaged() { # backup_unmanaged <file|dir> <label> — keep the user's own config once
+  local f="$1" probe="$1"; [[ -d "$f" ]] && probe="${f}/sketchybarrc"
+  [[ -f "$probe" ]] && ! grep -q 'managed by shiny-theme' "$probe" || return 0
+  rm -rf "${f}.bak"; cp -R "$f" "${f}.bak"; warn "Backed up your own $2 config → ${f}.bak"
+}
+
+# ── palette loading + rendering ──────────────────────────────────────────────
+alpha_hex() { awk -v o="$1" 'BEGIN { printf "%02X", o*255+0.5 }'; }
+hex_float() { # "r g b" as 0–1 floats, the format AppleHighlightColor wants
+  local h="${1#\#}"
+  awk -v r=$((16#${h:0:2})) -v g=$((16#${h:2:2})) -v b=$((16#${h:4:2})) \
+    'BEGIN { printf "%.6f %.6f %.6f", r/255, g/255, b/255 }'
+}
+
+load_theme() {
+  THEME="$1"
+  THEME_DIR="$(theme_dir "$THEME")" || die "No such theme: ${THEME} (try: shiny theme list)"
+  # shellcheck source=/dev/null
+  source "${ROOT}/templates/style.sh"
+  # shellcheck source=/dev/null
+  source "${THEME_DIR}/palette.sh"
+  : "${GHOSTTY_THEME:?${THEME}: GHOSTTY_THEME not set}"
+  # A theme built from its image ships its own Ghostty theme file.
+  [[ -f "${THEME_DIR}/${GHOSTTY_THEME}" ]] && GHOSTTY_THEME="${THEME_DIR}/${GHOSTTY_THEME}"
+  : "${ACCENT_PRESET:=4}" "${WALLPAPER:=wallpaper.jpg}" "${ALFRED_BLUR:=$BLUR}"
+  : "${WINDOW_GAP:=10}" "${BAR_HEIGHT:=34}"
+  BAR_Y_OFFSET="$(awk -v g="$WINDOW_GAP" 'BEGIN { print g / 2 }')"   # SketchyBar's y_offset counts double
+  ALPHA_HEX="$(alpha_hex "$OPACITY")"
+  ALFRED_ALPHA_HEX="$(alpha_hex "${ALFRED_OPACITY:-$OPACITY}")"
+  MATERIAL_ALPHA_HEX="$(alpha_hex "${MATERIAL_OPACITY:-$OPACITY}")"
+  CIDER_ALPHA_HEX="$(alpha_hex "${CIDER_OPACITY:-${MATERIAL_OPACITY:-$OPACITY}}")"
+  local r h
+  for r in "${COLOR_ROLES[@]}"; do
+    [[ "${!r:-}" =~ ^#[0-9A-Fa-f]{6}$ ]] || die "${THEME}: ${r} missing or not #RRGGBB (see: shiny theme check ${THEME})"
+    h="$(tr 'a-f' 'A-F' <<<"${!r#\#}")"
+    printf -v "$r" '#%s' "$h"
+    printf -v "${r}_RGB" '%d, %d, %d' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
+    printf -v "${r}_ARGB" '0xff%s' "$(tr 'A-F' 'a-f' <<<"$h")"
+  done
+  # Chrome needs a new version to notice an unpacked theme changed.
+  VERSION="1.$(date +%y%j).$(date +%H%M)"
+  ACCENT_HUE="$(awk -v r=$((16#${ACCENT:1:2})) -v g=$((16#${ACCENT:3:2})) -v b=$((16#${ACCENT:5:2})) 'BEGIN {
+    r/=255; g/=255; b/=255; mx=r; if (g>mx) mx=g; if (b>mx) mx=b
+    mn=r; if (g<mn) mn=g; if (b<mn) mn=b; d=mx-mn
+    if (d==0) h=0; else if (mx==r) h=(g-b)/d; else if (mx==g) h=(b-r)/d+2; else h=(r-g)/d+4
+    h*=60; if (h<0) h+=360; printf "%d", h+0.5 }')"
+  # One sed script fills every {{PLACEHOLDER}} (bash ${//} took seconds per template).
+  RENDER_SED="$(mktemp "${TMPDIR:-/tmp}/shiny-render.XXXXXX")"
+  local var v
+  for var in THEME GHOSTTY_THEME VERSION ACCENT_HUE OPACITY BLUR ALFRED_BLUR ALPHA_HEX ALFRED_ALPHA_HEX \
+             WINDOW_GAP BAR_HEIGHT BAR_Y_OFFSET \
+             MATERIAL_ALPHA_HEX CIDER_ALPHA_HEX "${COLOR_ROLES[@]}" \
+             $(printf '%s_RGB ' "${COLOR_ROLES[@]}") $(printf '%s_ARGB ' "${COLOR_ROLES[@]}"); do
+    v="${!var}"; v="${v//\\/\\\\}"; v="${v//|/\\|}"; v="${v//&/\\&}"
+    printf 's|{{%s}}|%s|g\n' "$var" "$v"
+  done > "$RENDER_SED"
+}
+
+render() { # render <template> <dest>
+  local src="${ROOT}/templates/$1" dest="$2" left
+  mkdir -p "$(dirname "$dest")"
+  sed -f "$RENDER_SED" "$src" > "${dest}.shiny-tmp"
+  left="$(grep -o '{{[A-Z_0-9]*}}' "${dest}.shiny-tmp" | head -1 || true)"
+  [[ -z "$left" ]] || { rm -f "${dest}.shiny-tmp"; die "Unfilled placeholder in $1: $left"; }
+  mv -f "${dest}.shiny-tmp" "$dest"
+}
+
+native_tool() { # native_tool <name> [framework…] — builds libexec/<name>.{m,swift} once, prints its path
+  local name="$1"; shift
+  local src="${ROOT}/libexec/${name}.m" bin="${SUPPORT_DIR}/bin/${name}" f fw=()
+  [[ -f "$src" ]] || src="${ROOT}/libexec/${name}.swift"
+  if [[ ! -x "$bin" || "$src" -nt "$bin" ]]; then
+    mkdir -p "$(dirname "$bin")"
+    if [[ "$src" == *.swift ]]; then
+      command -v swiftc >/dev/null 2>&1 || return 1
+      # libexec/<name>.plist, if any, is embedded as the tool's Info.plist (privacy prompts need it).
+      local plist="${ROOT}/libexec/${name}.plist" pl=()
+      [[ -f "$plist" ]] && pl=(-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$plist")
+      swiftc -O ${pl[@]+"${pl[@]}"} "$src" -o "$bin" 2>/dev/null || return 1
+    else
+      command -v clang >/dev/null 2>&1 || return 1
+      for f in "$@"; do fw+=(-framework "$f"); done
+      clang -fobjc-arc -O2 ${fw[@]+"${fw[@]}"} "$src" -o "$bin" 2>/dev/null || return 1
+    fi
+  fi
+  printf '%s' "$bin"
+}
+
+frost() { # frost → path of the theme's blurred wallpaper (cached per wallpaper + colour + style)
+  local src="${THEME_DIR}/${WALLPAPER}" tool key out
+  [[ -f "$src" ]] || return 1
+  key="$(cat "$src" "${ROOT}/libexec/frost.swift" | shasum | cut -c1-16)-${BG#\#}-${OPACITY}-${BLUR}"
+  out="${CACHE_DIR}/frost/${key}.png"
+  if [[ ! -f "$out" ]]; then
+    tool="$(native_tool frost)" || { warn "swiftc not found (Xcode CLT) — no frosted background."; return 1; }
+    mkdir -p "${CACHE_DIR}/frost"
+    "$tool" "$src" "${out}.tmp.png" "$BG" "$OPACITY" "$BLUR" && mv -f "${out}.tmp.png" "$out" \
+      || { rm -f "${out}.tmp.png"; warn "Couldn't make the frosted background."; return 1; }
+    ls -t "${CACHE_DIR}/frost/"*.png | tail -n +21 | while IFS= read -r f; do rm -f "$f"; done   # keep 20
+  fi
+  printf '%s' "$out"
+}
+
+# ── targets ──────────────────────────────────────────────────────────────────
+apply_ghostty() {
+  local dest="${HOME}/.config/ghostty/config"
+  backup_unmanaged "$dest" Ghostty
+  render ghostty.conf "$dest"
+  # Live-reload open windows via Ghostty's AppleScript (no-op with no windows;
+  # new windows read the file anyway). First run asks for Automation permission.
+  if app_running Ghostty; then
+    osascript -e 'tell application "Ghostty"' \
+              -e 'if (count terminals) > 0 then perform action "reload_config" on first terminal' \
+              -e 'end tell' >/dev/null 2>&1 || true
+  fi
+  info "Ghostty: updated."
+}
+
+apply_borders() {
+  local dest="${HOME}/.config/borders/bordersrc"
+  render bordersrc "$dest"; chmod +x "$dest"
+  if [[ -f "${HOME}/Library/LaunchAgents/shiny.borders.plist" ]]; then
+    # Patched build (libexec/install-borders) runs as our own launch agent.
+    if launchctl print "gui/$(id -u)/shiny.borders" 2>/dev/null | grep -q 'state = running'; then
+      launchctl kickstart -k "gui/$(id -u)/shiny.borders" >/dev/null 2>&1 && info "Borders: restarted (patched)." \
+        || warn "Couldn't restart shiny.borders."
+    else
+      info "Borders: updated (not running; applies when it starts)."
+    fi
+  elif command -v borders >/dev/null 2>&1; then
+    if brew services list 2>/dev/null | grep -qE '^borders +started'; then
+      brew services restart borders >/dev/null 2>&1 && info "Borders: restarted." || warn "Couldn't restart borders."
+    else
+      info "Borders: updated (not running; applies when it starts)."
+    fi
+  else
+    warn "borders not installed — skipped restart."
+  fi
+}
+
+alfred_prefs_dir() {
+  local sync
+  sync="$(defaults read com.runningwithcrayons.Alfred-Preferences syncfolder 2>/dev/null || true)"
+  sync="${sync/#\~/$HOME}"
+  [[ -n "$sync" ]] || sync="${HOME}/Library/Application Support/Alfred"
+  printf '%s/Alfred.alfredpreferences' "$sync"
+}
+
+apply_alfred() {
+  local prefs; prefs="$(alfred_prefs_dir)"
+  [[ -d "$prefs" ]] || { warn "Alfred preferences not found — open Alfred once, then re-run."; return 0; }
+  render alfred.json "${prefs}/themes/${ALFRED_THEME_UID}/theme.json"
+  # Select it for both light and dark mode. The per-machine prefs live under
+  # preferences/local/<machine hash>/ — only exists once Alfred has run here.
+  local p found=0
+  for p in "${prefs}"/preferences/local/*/appearance/prefs.plist; do
+    [[ -f "$p" ]] || continue
+    plutil -replace darkthemeuid  -string "$ALFRED_THEME_UID" "$p"
+    plutil -replace lightthemeuid -string "$ALFRED_THEME_UID" "$p"
+    found=1
+  done
+  # Alfred doesn't always notice the theme file changed; its AppleScript
+  # "set theme" (by the name inside theme.json) makes it reload right away.
+  if app_running "Alfred 5" || app_running Alfred; then
+    osascript -e "tell application id \"com.runningwithcrayons.Alfred\" to set theme \"${THEME}\"" >/dev/null 2>&1 || true
+  fi
+  ((found)) && info "Alfred: theme '${THEME}' selected." \
+            || warn "Alfred: theme written, but select '${THEME}' in Appearance once."
+  ((RELAUNCH)) && relaunch "Alfred 5"
+  return 0
+}
+
+helium_restores_tabs() { # is "On startup → Continue where you left off" on?
+  [[ -f "$HELIUM_PREFS" ]] && /usr/bin/python3 -c 'import json, sys
+sys.exit(0 if json.load(open(sys.argv[1])).get("session", {}).get("restore_on_startup") == 1 else 1)' "$HELIUM_PREFS" 2>/dev/null
+}
+
+apply_helium() {
+  mkdir -p "$HELIUM_DIR"
+  # Helium windows can't be see-through: new tab page gets a frosted wallpaper.
+  local f; f="$(frost)" && cp -f "$f" "${HELIUM_DIR}/ntp.png" || rm -f "${HELIUM_DIR}/ntp.png"
+  render helium.json "${HELIUM_DIR}/manifest.json"
+  # Chromium only re-reads an unpacked theme at launch, and starts from its
+  # compiled "Cached Theme.pak" even when the files changed: drop the cache.
+  rm -f "${HELIUM_DIR}/Cached Theme.pak"
+  app_running Helium || { info "Helium: updated (applies on next launch)."; return 0; }
+  # Relaunching only keeps your tabs with "Continue where you left off" on.
+  if ! helium_restores_tabs && [[ "${SHINY_RESTART_HELIUM:-0}" != 1 ]]; then
+    info "Helium: updated — restart it to see the theme (turn on Settings → On startup → Continue where you left off and shiny restarts it for you)."
+    return 0
+  fi
+  curtain_say "Restarting Helium…"
+  if quit_app Helium 8; then
+    rm -f "${HELIUM_DIR}/Cached Theme.pak"   # it may have rewritten it while quitting
+    open -a Helium && info "Helium: relaunched."
+  else
+    warn "Helium didn't quit (download in progress?) — the theme applies next time you restart it."
+  fi
+}
+
+apply_sketchybar() {
+  command -v sketchybar >/dev/null 2>&1 || return 0
+  local dir="${HOME}/.config/sketchybar"
+  backup_unmanaged "$dir" SketchyBar
+  mkdir -p "${dir}/plugins"
+  render sketchybar/sketchybarrc "${dir}/sketchybarrc"
+  render sketchybar/colors.sh "${dir}/colors.sh"
+  cp -f "${ROOT}/templates/sketchybar/plugins/"*.sh "${dir}/plugins/"
+  native_tool next-event >/dev/null || warn "SketchyBar: couldn't build the calendar helper (needs Xcode CLT)."
+  chmod +x "${dir}/sketchybarrc" "${dir}/plugins/"*.sh
+  if [[ -n "$(sketchybar --query bar 2>/dev/null)" ]]; then   # running
+    sketchybar --reload && info "SketchyBar: reloaded."
+  else
+    info "SketchyBar: updated (not running; applies when it starts)."
+  fi
+}
+
+apply_cider() {
+  local dir="${HOME}/Library/Application Support/sh.cider.genten"
+  [[ -f "${dir}/spa-config.yml" ]] || return 0
+  local css="${SUPPORT_DIR}/cider.css" tokfile="${STATE_DIR}/cider-token" was_running=0
+  render cider.css "$css"
+  # Cider keeps its settings in memory and rewrites spa-config.yml while it
+  # runs, so the theme can only be written while it's closed.
+  if app_running Cider; then
+    was_running=1
+    curtain_say "Restarting Cider…"
+    quit_app Cider 8 || { warn "Cider didn't quit — its theme applies next time you restart it."; return 0; }
+  fi
+  # Playback-only token for Cider's local API, so SketchyBar can show what's playing.
+  if [[ ! -s "$tokfile" ]]; then
+    mkdir -p "$STATE_DIR"; (umask 077; openssl rand -hex 24 > "$tokfile")
+  fi
+  /usr/bin/python3 "${ROOT}/libexec/cider-config.py" "${dir}/spa-config.yml" "$css" "$ACCENT" "$(<"$tokfile")" \
+    || { warn "Cider: couldn't update its settings."; return 0; }
+  if ((was_running)); then open -a Cider && info "Cider: relaunched."; else info "Cider: updated (applies on next launch)."; fi
+}
+
+apply_beeper() {
+  local dir="${HOME}/Library/Application Support/BeeperTexts" dest
+  [[ -d "$dir" ]] || { warn "Beeper data folder not found — skipped."; return 0; }
+  dest="${dir}/custom.css"
+  backup_unmanaged "$dest" Beeper
+  render beeper.css "$dest"
+  # Beeper doesn't reliably re-read custom.css: restart it if it's open,
+  # otherwise it picks the theme up on next launch.
+  if app_running "Beeper Desktop"; then
+    curtain_say "Restarting Beeper…"
+    relaunch "Beeper Desktop" && info "Beeper: relaunched."
+  else
+    info "Beeper: updated (applies on next launch)."
+  fi
+  return 0
+}
+
+apply_fastmail() {
+  [[ -d /Applications/Fastmail.app ]] || return 0
+  # The shiny.fastmail agent (libexec/install-fastmail) watches this file and
+  # re-injects it into Fastmail live.
+  render fastmail.css "${SUPPORT_DIR}/fastmail.css"
+  if [[ -f "${HOME}/Library/LaunchAgents/shiny.fastmail.plist" ]]; then
+    info "Fastmail: updated (live)."
+  else
+    info "Fastmail: CSS written — run ${ROOT}/libexec/install-fastmail once to inject it."
+  fi
+}
+
+apply_macos() {
+  # Accent, text highlight and icon tint go through the same APIs System
+  # Settings uses (libexec/appearance.m), so macOS tells running apps, the Dock
+  # and widgets. Plain `defaults write` only changes the stored value.
+  local tint="${ICON_TINT:-$ACCENT}" alpha="${ICON_TINT_ALPHA:-1}" tool old_accent old_tint new_tint
+  new_tint="$(hex_float "$tint") $(awk -v a="$alpha" 'BEGIN { printf "%.6f", a }')"
+  old_accent="$(defaults read -g AppleAccentColor 2>/dev/null || echo 99)"
+  old_tint="$(defaults read -g AppleIconAppearanceCustomTintColor 2>/dev/null || true)"
+  if tool="$(native_tool appearance Foundation CoreGraphics)"; then
+    "$tool" --accent "$ACCENT_PRESET" --highlight "$(hex_float "$ACCENT")" --tint "$new_tint" \
+      || warn "macOS: couldn't set appearance via System Settings' API."
+  else
+    warn "macOS: clang not found (Xcode CLT) — falling back to defaults; some apps need a relaunch."
+    defaults write -g AppleAccentColor -int "$ACCENT_PRESET"
+    defaults write -g AppleHighlightColor -string "$(hex_float "$ACCENT") Other"
+    defaults write -g AppleIconAppearanceTintColor -string Other
+    defaults write -g AppleIconAppearanceCustomTintColor -string "$new_tint"
+  fi
+  # Redraw the system UI so everything shows the new colours right away:
+  # Dock (icons), NotificationCenter (widgets), WindowManager (Mission Control,
+  # Stage Manager), ControlCenter + SystemUIServer (menu bar), Finder.
+  # macOS relaunches them immediately; doing this first lets them come back
+  # while the other targets work. The curtain hides the flicker.
+  killall Dock NotificationCenter WindowManager ControlCenter SystemUIServer Finder 2>/dev/null || true
+  if [[ "$old_tint" != "$new_tint" || "$old_accent" != "$ACCENT_PRESET" ]]; then
+    ICON_TINT_CHANGED=1   # Alfred caches app icons: restarted at the end
+  fi
+  info "macOS: accent preset ${ACCENT_PRESET}, text highlight ${ACCENT}, icon tint ${tint}."
+}
+
+apply_wallpaper() {
+  local src="${THEME_DIR}/${WALLPAPER}" dest index i before
+  [[ -f "$src" ]] || { warn "No wallpaper in ${THEME_DIR} — skipped."; return 0; }
+  # Copy out of the repo: macOS keeps a live reference to the path.
+  dest="${HOME}/Pictures/shiny-${THEME}.${WALLPAPER##*.}"
+  cmp -s "$src" "$dest" || cp -f "$src" "$dest"
+  index="${HOME}/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
+  before="$(stat -f %m "$index" 2>/dev/null || echo 0)"
+  if command -v wallpaper >/dev/null 2>&1; then
+    wallpaper set "$dest" || { warn "Couldn't set wallpaper."; return 0; }
+  else
+    osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$dest\"" \
+      >/dev/null || { warn "Couldn't set wallpaper."; return 0; }
+  fi
+  # macOS only set it on the current desktop. Once it has written Index.plist
+  # (was a fixed 1s sleep), copy it to every desktop.
+  for ((i = 0; i < 20; i++)); do [[ "$(stat -f %m "$index" 2>/dev/null || echo 0)" != "$before" ]] && break; sleep 0.1; done
+  sleep 0.2
+  /usr/bin/python3 "${ROOT}/libexec/wallpaper-all.py" && info "Wallpaper: set on all desktops." \
+    || warn "Wallpaper: set, but couldn't copy it to other desktops."
+}
+
+# ── timing ───────────────────────────────────────────────────────────────────
+TIMINGS="${TMPDIR:-/tmp}/shiny-timings.$$"
+run_target() { # run_target <target> — apply_<target>, timed
+  local t0; t0="$(now_ms)"
+  "apply_$1" || warn "$1: failed."
+  printf '%-11s %5d ms\n' "$1" "$(( $(now_ms) - t0 ))" >> "$TIMINGS"
+}
+
+# ── curtain ──────────────────────────────────────────────────────────────────
+# Black loading screen over every display while apps restart/relaunch, so the
+# flashing happens out of sight (libexec/curtain.m). SHINY_CURTAIN=0 turns it off.
+CURTAIN_PID=""
+CURTAIN_STATUS="${TMPDIR:-/tmp}/shiny-curtain-status.$$"
+curtain_say() { [[ -n "$CURTAIN_PID" ]] && printf '%s\n' "$*" > "$CURTAIN_STATUS" 2>/dev/null || true; }
+curtain_up() {
+  [[ "${SHINY_CURTAIN:-1}" != 0 ]] || return 0
+  local tool ready i
+  tool="$(native_tool curtain AppKit QuartzCore)" || return 0
+  ready="${TMPDIR:-/tmp}/shiny-curtain.$$"; rm -f "$ready"
+  printf 'Applying %s…\n' "$THEME" > "$CURTAIN_STATUS"
+  "$tool" --ready "$ready" --status "$CURTAIN_STATUS" >/dev/null 2>&1 &
+  CURTAIN_PID=$!
+  # Wait until it's fully black before touching anything (gives up after 3s).
+  for i in {1..30}; do [[ -f "$ready" ]] && break; sleep 0.1; done
+  rm -f "$ready"
+}
+curtain_down() { # curtain_down [settle secs] — let relaunched apps draw, then fade out
+  [[ -n "$CURTAIN_PID" ]] || return 0
+  [[ -n "${1:-}" ]] && sleep "$1"
+  kill -TERM "$CURTAIN_PID" 2>/dev/null || true
+  CURTAIN_PID=""
+  ( sleep 1; rm -f "$CURTAIN_STATUS" ) >/dev/null 2>&1 &
+}
+cleanup() { curtain_down; rm -f "${RENDER_SED:-}" "$TIMINGS"; }
+trap cleanup EXIT
+
+# ── main ─────────────────────────────────────────────────────────────────────
+case "${1:-}" in
+  ""|-h|--help) awk 'NR>2 && /^#/ {sub(/^# ?/, ""); print; next} NR>2 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
+  --list) list_themes; exit 0 ;;
+  --alfred) alfred_items; exit 0 ;;
+  --render)
+    [[ $# -eq 3 ]] || die "usage: shiny-apply --render <name> <dir>"
+    load_theme "$2"; mkdir -p "$3"
+    for t in "${RENDER_SET[@]}"; do render "${t%%:*}" "$3/${t#*:}"; done
+    info "Rendered ${THEME} into $3"; exit 0 ;;
+  --warm)
+    [[ $# -eq 2 ]] || die "usage: shiny-apply --warm <name>"
+    load_theme "$2"; frost >/dev/null; exit 0 ;;
+esac
+
+[[ "$(uname -s)" == "Darwin" ]] || die "macOS only."
+RELAUNCH=0
+if [[ "$1" == "-r" || "$1" == "--relaunch" ]]; then RELAUNCH=1; shift; fi
+ONLY=""
+if [[ "${1:-}" == "--only" ]]; then ONLY="${2:-}"; shift 2 || true; fi
+[[ -n "${1:-}" ]] || die "usage: shiny-apply [-r] [--only <target>] <name>"
+load_theme "$1"
+if [[ -n "$ONLY" ]]; then
+  declare -F "apply_${ONLY}" >/dev/null || die "unknown target ${ONLY} (${TARGETS[*]})"
+  "apply_${ONLY}"; exit 0
+fi
+
+T0="$(now_ms)"
+info "Applying ${B}${THEME}${N} (${THEME_BASE:-custom})…"
+curtain_up
+# macOS first, in this shell: its system UI restarts overlap with everything
+# else, and it decides whether Alfred needs restarting at the end. Then every
+# other target runs at once, so one slow or stuck app can't hold up the rest.
+curtain_say "Recolouring macOS…"
+run_target macos
+curtain_say "Theming apps…"
+JOBS=()
+for t in "${TARGETS[@]}"; do [[ "$t" == macos ]] || { run_target "$t" & JOBS+=($!); }; done
+wait "${JOBS[@]}" 2>/dev/null || true
+mkdir -p "$STATE_DIR"; printf '%s\n' "$THEME" > "${STATE_DIR}/current"
+# Alfred only re-draws app icons (new tint) after a restart. Do it last and
+# detached, since this may be running from Alfred's own workflow. The curtain
+# stays up until Alfred is back.
+if ((ICON_TINT_CHANGED)) && app_running "Alfred 5"; then
+  nohup /bin/bash -c 'sleep 1; osascript -e "quit app \"Alfred 5\"" >/dev/null 2>&1
+    for i in {1..40}; do [[ "$(osascript -e "application \"Alfred 5\" is running")" == true ]] || break; sleep 0.25; done
+    open -a "Alfred 5"
+    [[ -n "$1" ]] && { sleep 1; kill -TERM "$1" 2>/dev/null; }' _ "$CURTAIN_PID" >/dev/null 2>&1 &
+  CURTAIN_PID=""
+  curtain_say "Restarting Alfred…"
+  info "Alfred: restarting to pick up the new icon tint."
+fi
+# Dock, Finder, widgets and relaunched apps take a moment to draw.
+curtain_say "Almost done…"
+curtain_down 1
+if [[ "${SHINY_TIMINGS:-0}" == 1 ]]; then
+  sort -k2 -n -r "$TIMINGS"; printf '%-11s %5d ms\n' total "$(( $(now_ms) - T0 ))"
+fi
+info "Done."

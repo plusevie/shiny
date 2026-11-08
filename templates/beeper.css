@@ -1,0 +1,80 @@
+/* managed by shiny-theme ({{THEME}}) — edit templates/beeper.css, not this file.
+   Beeper injects this as a <style> tag and reloads it when the file changes. */
+
+:root, body {
+  --theme-hue: {{ACCENT_HUE}} !important;
+
+  /* surfaces */
+  /* one material: panels transparent, the tint lives on <body> only, so the
+     inset main pane and the window frame around it are identical */
+  --appearance-color-bg-primary: transparent !important;
+  --color-bg: transparent !important;
+  --color-background-grouped: transparent !important;
+  --color-background-elevated: {{SURFACE}} !important;
+  --color-background-elevated-hover: {{SELECTION}} !important;
+  --color-background-selected: {{SELECTION}} !important;
+  --color-bg-fill-primary: {{SURFACE}} !important;
+  --color-bg-fill-secondary: transparent !important;
+  --color-secondary-container: {{SELECTION}} !important;
+  --color-on-secondary-container: {{FG}} !important;
+
+  /* text */
+  --color-on-surface: {{FG}} !important;
+  --color-on-surface-rgb: {{FG_RGB}} !important;
+  --color-on-surface-variant: {{FG_DIM}} !important;
+  --color-text-primary: {{FG}} !important;
+  --color-text-secondary: {{COMMENT}} !important;
+  --color-text-neutrals-weak: {{COMMENT}} !important;
+  --semantic-colors-text-main: {{FG}} !important;
+  --semantic-colors-text-primary: {{FG}} !important;
+  --semantic-colors-text-secondary: {{COMMENT}} !important;
+
+  /* accent */
+  --color-primary: {{ACCENT}} !important;
+  --color-primary-rgb: {{ACCENT_RGB}} !important;
+  --color-primary-container: {{SELECTION}} !important;
+  --appearance-color-text-on-main: {{BG_DARK}} !important;
+  --semantic-colors-text-on-main: {{BG_DARK}} !important;
+
+  /* lines */
+  --color-outline: {{SURFACE}} !important;
+  --color-outline-variant: {{SURFACE}} !important;
+  --color-border-neutrals: {{SURFACE}} !important;
+  --color-border-neutrals-weak: {{SURFACE}} !important;
+
+  /* bubbles */
+  --bubble-out-bg: {{ACCENT}} !important;
+  --bubble-out-fg: {{BG_DARK}} !important;
+  --bubble-bg-color: {{SURFACE}} !important;
+  --color-background-message-bubble-received: {{SURFACE}} !important;
+}
+
+html, body { background: {{BG}}{{MATERIAL_ALPHA_HEX}} !important; }
+
+/* Floating surfaces. Beeper paints these with --appearance-color-bg-primary,
+   which is transparent above (for the glass panes), so the Cmd+K bar, tooltips,
+   hover cards, toasts and popovers would show the chat behind them. Give them
+   their own near-solid, blurred tint. */
+.command-bar,
+.prefs-search-suggestions,
+[class*="Tooltip-module__tooltip"],
+[class*="HoverCard-module__card"],
+[class*="Hovercard-module__card"],
+[class*="Toasts-module__container"],
+[class*="StatusPill-module__statusPillToast"],
+[class*="IconColorPicker-module__popover"] > div,
+[class*="LinkDialog-module__container"],
+[class*="RenameAccount-module__card"],
+[class*="LabelSchedule-module__card"],
+[class*="CreateLabel-module__container"],
+[class*="MergedChatEditor-module__container"],
+[class*="PollCreator-module__card"],
+[class*="ChangeEmailModal-module__container"],
+[class*="AddNewAccounts-module__modalCard"],
+[class*="DevicesPrefsSubView-module__sendLinkDropdown"],
+[class*="ScrollToBottom-module__scrollToBottom"] {
+  background: {{BG}}EB !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.2) !important;
+  backdrop-filter: blur(24px) saturate(1.2) !important;
+}
+.command-bar { box-shadow: 0 0 0 1px {{SURFACE}}, 0 16px 48px #0008 !important; }

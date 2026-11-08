@@ -1,0 +1,145 @@
+/* managed by shiny-theme ({{THEME}}) — edit templates/fastmail.css, not this file.
+   Injected into the Fastmail app by libexec/fastmail-inject (shiny.fastmail
+   launch agent); it re-injects whenever this file changes. */
+
+/* Fastmail's own tokens live on :root.t-dark / :root.t-light (and the theme
+   accent on .t-dark.t-dark); html:root.t-* plus !important outranks both. */
+html:root.t-dark, html:root.t-light, html:root .t-dark.t-dark, html:root .t-light.t-light {
+  color-scheme: dark !important;
+
+  /* accent */
+  --theme-color-accent-10: {{SELECTION}} !important;
+  --theme-color-accent-60: color-mix(in srgb, {{ACCENT}} 60%, {{BG}}) !important;
+  --theme-color-accent-100: {{ACCENT}} !important;
+  --theme-color-accent-110: color-mix(in srgb, {{ACCENT}} 88%, {{FG}}) !important;
+  --theme-color-accent-120: color-mix(in srgb, {{ACCENT}} 76%, {{FG}}) !important;
+
+  /* one material, like Beeper: chrome is transparent and the tint lives on
+     <html>, over the window's own macOS vibrancy */
+  --theme-color-header: transparent !important;
+  --theme-color-headerStop: transparent !important;
+  --theme-color-header-fg: {{FG}} !important;
+  --theme-color-sidebar: transparent !important;
+  --theme-color-sidebar-accent: {{SELECTION}} !important;
+  --ui-page-color-bg-backdrop: transparent !important;
+  --ui-page-color-bg-backdrop-fade0: rgba({{BG_RGB}}, 0) !important;
+
+  /* content panes stay solid enough to read mail on */
+  --ui-page-color-bg: rgba({{BG_RGB}}, 0.55) !important;
+  --ui-page-color-bg-fade0: rgba({{BG_RGB}}, 0) !important;
+  --ui-page-color-bg-fade20: rgba({{BG_RGB}}, .2) !important;
+  --ui-page-color-bg-fade40: rgba({{BG_RGB}}, .4) !important;
+  --ui-page-color-bg-fade60: rgba({{BG_RGB}}, .6) !important;
+  --ui-page-color-bg-fade80: rgba({{BG_RGB}}, .8) !important;
+  --ui-page-color-bg-fade90: rgba({{BG_RGB}}, .9) !important;
+  --ui-page-color-bg-fade100: {{BG}} !important;
+  --ui-page-color-bg-hover: {{SURFACE}} !important;
+  --ui-page-color-bg-active: {{SELECTION}} !important;
+  --ui-page-color-bg-focused: {{SURFACE}} !important;
+  --ui-page-color-bg-selected: {{SELECTION}} !important;
+  --ui-page-color-border: {{MUTED}} !important;
+  --ui-page-color-border-medium: {{SURFACE}} !important;
+  --ui-page-color-border-subtle: {{SURFACE}} !important;
+  --ui-page-color-fg: {{FG}} !important;
+  --ui-page-color-fg-subtle: {{FG_DIM}} !important;
+  --ui-page-color-fg-vsubtle: {{COMMENT}} !important;
+  --ui-page-color-fg-action: {{ACCENT}} !important;
+  --ui-page-color-fg-inverse: {{BG_DARK}} !important;
+
+  /* sidebar */
+  --ui-sidebar-color-fg: {{FG}} !important;
+  --ui-sidebar-color-bg-focused: {{SURFACE}} !important;
+
+  /* popovers, menus, modals: opaque — they float over content */
+  --ui-layer-color-bg: {{BG_DARK}} !important;
+  --ui-layer-color-bg-withblur: rgba({{BG_DARK_RGB}}, .85) !important;
+  --ui-layer-color-bg-glass: rgba({{BG_DARK_RGB}}, .6) !important;
+  --ui-layer-color-border: {{SURFACE}} !important;
+  --ui-layer-color-border-divider: {{SURFACE}} !important;
+  --ui-notification-color-bg: {{SURFACE}} !important;
+  --ui-notification-color-fg: {{FG}} !important;
+  --ui-card-color-border: {{SURFACE}} !important;
+  --ui-altsurface-color-bg: {{SURFACE}} !important;
+  --ui-altsurface-color-bg-focused: {{SELECTION}} !important;
+  --ui-badge-color-bg: {{SURFACE}} !important;
+  --ui-today-color-bg: {{SELECTION}} !important;
+  --ui-today-color-border: {{ACCENT}} !important;
+  --ui-accordian-bg: {{SURFACE}} !important;
+  --ui-accordian-bg-done: {{BG_DARK}} !important;
+  --ui-setupbanner-bg: {{SURFACE}} !important;
+  --ui-pageheader-search-color-border: {{SURFACE}} !important;
+  --ui-pageheader-search-color-border-hover: {{MUTED}} !important;
+
+  /* buttons + inputs */
+  --ui-button-cta-color-fg: {{BG_DARK}} !important;
+  --ui-button-cta-color-border-focus: {{SELECTION}} !important;
+  --ui-button-cta-color-outline-focus: {{ACCENT}} !important;
+  --ui-button-cta-color-bg-disabled: {{MUTED}} !important;
+  --ui-button-subtle-color-fg: {{FG_DIM}} !important;
+  --ui-button-subtle-color-fg-hover: {{FG}} !important;
+  --ui-button-subtle-color-fg-disabled: {{MUTED}} !important;
+  --ui-button-subtle-color-bg-hover: {{SURFACE}} !important;
+  --ui-button-subtle-color-bg-active: {{SELECTION}} !important;
+  --ui-button-subtle-color-border-focus: {{ACCENT}} !important;
+  --ui-button-subtle-color-outline-focus: {{ACCENT}} !important;
+  --ui-button-simple-color-fg: {{FG}} !important;
+  --ui-button-simple-color-fg-disabled: {{MUTED}} !important;
+  --ui-button-simple-color-bg: {{SURFACE}} !important;
+  --ui-button-simple-color-bg-hover: {{SELECTION}} !important;
+  --ui-button-simple-color-bg-active: {{SELECTION}} !important;
+  --ui-button-simple-color-bg-disabled: transparent !important;
+  --ui-button-simple-color-border-disabled: {{SURFACE}} !important;
+  --ui-button-simple-color-border-focus: {{ACCENT}} !important;
+  --ui-button-simple-color-outline-focus: {{ACCENT}} !important;
+  --ui-button-selected-color-fg: {{FG}} !important;
+  --ui-input-color-bg: rgba({{BG_DARK_RGB}}, .6) !important;
+  --ui-input-color-bg-active: {{BG_DARK}} !important;
+  --ui-input-color-border: {{MUTED}} !important;
+  --ui-input-color-border-hover: {{COMMENT}} !important;
+  --ui-input-focused-color-border: {{ACCENT}} !important;
+  --ui-input-focused-color-outline: {{ACCENT}} !important;
+  --ui-input-focused-color-outline-fade40: rgba({{ACCENT_RGB}}, .4) !important;
+  --ui-input-activated-color-fg: {{BG_DARK}} !important;
+  --ui-input-disabled-color-fg: {{MUTED}} !important;
+  --ui-input-disabled-color-bg: {{SURFACE}} !important;
+  --ui-input-disabled-color-border: {{SURFACE}} !important;
+  --ui-input-icon-color-stroke: {{FG_DIM}} !important;
+  --ui-input-icon-color-stroke-hover: {{FG}} !important;
+  --ui-toggle-color-bg: {{MUTED}} !important;
+  --ui-toggle-color-bg-hover: {{COMMENT}} !important;
+
+  /* small bits */
+  --ui-icon-unread-color-fill-isunread: {{ACCENT}} !important;
+  --ui-icon-unread-color-fill-isread: {{MUTED}} !important;
+  --ui-icon-star-color-fill-on: {{ACCENT2}} !important;
+  --ui-icon-star-color-stroke-on: {{ACCENT2}} !important;
+  --ui-icon-star-color-stroke-off: {{COMMENT}} !important;
+  --ui-icon-emoji-color-fill-grey: {{COMMENT}} !important;
+  --ui-highlight-color-fg: {{ACCENT2}} !important;
+  --ui-loading-color-fg: {{ACCENT}} !important;
+  --ui-kbfocus-color-fg: {{ACCENT}} !important;
+  --ui-newicon-bg: {{ACCENT2}} !important;
+  --ui-newicon-fg: {{BG_DARK}} !important;
+  --ui-bottomtoolbar-icon-color-primary: {{FG_DIM}} !important;
+  --ui-bottomtoolbar-icon-color-secondary: {{MUTED}} !important;
+  --ui-memo-color-bg-stop1: rgba({{ACCENT2_RGB}}, .22) !important;
+  --ui-memo-color-bg-stop2: rgba({{ACCENT2_RGB}}, .22) !important;
+  --ui-memo-color-fg: {{FG}} !important;
+}
+
+html:root { background: {{BG}}{{MATERIAL_ALPHA_HEX}} !important; }
+::selection { background: rgba({{ACCENT_RGB}}, .35); }
+
+/* Floating bars. Fastmail paints these with --ui-page-color-bg (55% above) or
+   --ui-page-color-bg-backdrop (transparent above), so the compose Send/Attach
+   bar and the formatting bar showed the message scrolling under them. Give them
+   their own near-solid, blurred tint — same fix as Beeper's floating surfaces. */
+.v-Page-main .v-Toolbar:not(.v-Toolbar .v-Toolbar),
+.v-Toolbar.v-RichText-toolbar,
+.v-StatusBar,
+.v-PageDialogFooter,
+.v-MailSearchFilter {
+  background: {{BG}}EB !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.2) !important;
+  backdrop-filter: blur(24px) saturate(1.2) !important;
+}

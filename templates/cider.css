@@ -1,0 +1,43 @@
+/* managed by shiny-theme ({{THEME}}) — edit templates/cider.css, not this file.
+   Goes into Cider's Settings → Visual → Custom CSS (spa-config.yml). The window
+   itself uses macOS "sidebar" vibrancy, the same material as Beeper. */
+
+body, body.body--dark {
+  /* text */
+  --textDefault: {{FG}} !important;
+  --systemPrimary: {{FG}} !important;
+  --systemPrimary-vibrant: {{FG}} !important;
+  --systemPrimary-onDark: {{FG}} !important;
+  --systemSecondary: {{FG_DIM}} !important;
+  --systemSecondary-vibrant: {{FG_DIM}} !important;
+  --systemSecondary-onDark: {{FG_DIM}} !important;
+  --systemTertiary: {{COMMENT}} !important;
+  --systemTertiary-onDark: {{COMMENT}} !important;
+  --systemQuaternary: {{SURFACE}}99 !important;
+  --systemQuinary: {{SURFACE}}55 !important;
+
+  /* accent */
+  --keyColor: {{ACCENT}} !important;
+  --keyColor-rgb: {{ACCENT_RGB}} !important;
+  --keyColor-rollover: color-mix(in srgb, {{ACCENT}}, white 15%) !important;
+  --keyColor-pressed: color-mix(in srgb, {{ACCENT}}, white 8%) !important;
+  --keyColor-deepPressed: color-mix(in srgb, {{ACCENT}}, white 15%) !important;
+  --keyColor-disabled: {{ACCENT}}59 !important;
+  --keyColor-default_IC: {{ACCENT}} !important;
+  --musicKeyColor: {{ACCENT}} !important;
+  --accent: {{ACCENT}} !important;
+  --q-accent: {{ACCENT}} !important;
+  --q-primary: {{ACCENT}} !important;
+
+  /* surfaces: one material, like Beeper. The tint lives on <body> only. */
+  --q-dark: transparent !important;
+  --q-dark-page: transparent !important;
+  --mats-darkBackgroundBase: {{BG_DARK}} !important;
+}
+
+html, body { background: {{BG}}{{CIDER_ALPHA_HEX}} !important; }
+/* Cider paints its page panel near-black (mixed from the accent) over the glass. */
+#app-viewport, #app-viewport .q-drawer, .q-layout, .q-page-container,
+.new-shell-page-container { background: transparent !important; }
+
+::selection { background: {{SELECTION}} !important; color: {{FG}} !important; }

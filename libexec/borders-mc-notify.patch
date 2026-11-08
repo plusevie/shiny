@@ -1,0 +1,31 @@
+diff --git a/src/misc/mission_control.h b/src/misc/mission_control.h
+index 65f5dbd..d960b42 100644
+--- a/src/misc/mission_control.h
++++ b/src/misc/mission_control.h
+@@ -62,9 +62,18 @@ static inline int mission_control_find_backdrop(uint32_t wid) {
+   return -1;
+ }
+ 
++// shiny: announce Mission Control enter/exit as distributed notifications so
++// other tools (SketchyBar: `--add event <name> shiny.missionControl.enter`) can react.
++static inline void mission_control_announce(bool active) {
++  CFNotificationCenterPostNotification(CFNotificationCenterGetDistributedCenter(),
++      active ? CFSTR("shiny.missionControl.enter") : CFSTR("shiny.missionControl.exit"),
++      NULL, NULL, true);
++}
++
+ static inline void mission_control_exit() {
+   debug("Mission Control Exit\n");
+   g_mission_control_active = false;
++  mission_control_announce(false);
+   DELAY_ASYNC_EXEC_ON_MAIN_THREAD(50000, {
+     windows_draw_borders_on_current_spaces(&g_windows);
+     windows_determine_and_focus_active_window(&g_windows);
+@@ -82,6 +91,7 @@ static inline void mission_control_window_created(int cid, uint32_t wid) {
+   if (!g_mission_control_active) {
+     debug("Mission Control Enter (backdrop %d)\n", wid);
+     g_mission_control_active = true;
++    mission_control_announce(true);
+     windows_hide_all(&g_windows);
+   }
+ }

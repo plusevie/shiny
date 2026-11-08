@@ -1,0 +1,38 @@
+{
+  "alfredtheme" : {
+    "name" : "{{THEME}}",
+    "credit" : "shiny",
+    "result" : {
+      "textSpacing" : 5,
+      "subtext" : { "size" : 12, "colorSelected" : "{{ACCENT}}FF", "font" : "System", "color" : "{{COMMENT}}FF" },
+      "shortcut" : { "size" : 16, "colorSelected" : "{{ACCENT2}}FF", "font" : "System", "color" : "{{MUTED}}FF" },
+      "backgroundSelected" : "{{SELECTION}}FF",
+      "text" : { "size" : 18, "colorSelected" : "{{FG}}FF", "font" : "System", "color" : "{{FG_DIM}}FF" },
+      "iconPaddingHorizontal" : 5,
+      "roundness" : 0,
+      "paddingVertical" : 3,
+      "iconSize" : 40
+    },
+    "separator" : { "color" : "{{SURFACE}}FF", "thickness" : 0 },
+    "search" : {
+      "backgroundSelected" : "{{ACCENT2}}55",
+      "paddingHorizontal" : 8,
+      "spacing" : 4,
+      "text" : { "size" : 34, "colorSelected" : "{{FG}}FF", "font" : "System Light", "color" : "{{FG}}FF" },
+      "background" : "{{BG_DARK}}00",
+      "roundness" : 0,
+      "paddingVertical" : 5
+    },
+    "scrollbar" : { "color" : "{{MUTED}}80", "thickness" : 0 },
+    "window" : {
+      "color" : "{{SURFACE}}{{ALFRED_ALPHA_HEX}}",
+      "paddingHorizontal" : 0,
+      "width" : 559,
+      "borderPadding" : 0,
+      "borderColor" : "{{SURFACE}}FF",
+      "blur" : {{ALFRED_BLUR}},
+      "roundness" : 12,
+      "paddingVertical" : 4
+    }
+  }
+}

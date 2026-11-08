@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#
+# install-borders — build JankyBorders 1.9.0 + the macOS 27 Mission Control fix
+# (andrewcincotta/JankyBorders@0017b53, upstream issues #147/#209), plus
+# borders-mc-notify.patch (Mission Control notifications for SketchyBar), and run it as
+# a launch agent instead of `brew services`.
+#
+#   libexec/install-borders           build + install + start
+#   shiny/libexec/install-borders --uninstall   back to Homebrew's borders
+#
+# Drop this once upstream ships the fix.
+
+set -euo pipefail
+
+SRC="${HOME}/github/JankyBorders"
+BIN="${HOME}/.local/bin/borders"
+LABEL="shiny.borders"
+PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+BASE="v1.9.0"
+FIX="0017b53"
+
+info() { printf '\033[34;1m==>\033[0m %s\n' "$*"; }
+die()  { printf '\033[31;1m==> ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+if [[ "${1:-}" == "--uninstall" ]]; then
+  launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
+  rm -f "$PLIST" "$BIN"
+  brew services start borders
+  info "Back on Homebrew borders."
+  exit 0
+fi
+
+# 1. Source: upstream at the release tag + only the fix commit.
+if [[ ! -d "$SRC/.git" ]]; then
+  git clone -q https://github.com/FelixKratz/JankyBorders "$SRC"
+fi
+git -C "$SRC" remote get-url fork >/dev/null 2>&1 \
+  || git -C "$SRC" remote add fork https://github.com/andrewcincotta/JankyBorders
+git -C "$SRC" fetch -q --tags origin
+git -C "$SRC" fetch -q fork
+if ! git -C "$SRC" rev-parse -q --verify mission-control-fix >/dev/null; then
+  git -C "$SRC" checkout -q -b mission-control-fix "$BASE"
+  git -C "$SRC" cherry-pick "$FIX" >/dev/null
+else
+  git -C "$SRC" checkout -q mission-control-fix
+fi
+
+# 1b. shiny's own patch: post shiny.missionControl.enter/exit distributed
+#     notifications so SketchyBar can hide itself during Mission Control.
+PATCH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/borders-mc-notify.patch"
+if ! git -C "$SRC" apply --reverse --check "$PATCH" 2>/dev/null; then
+  git -C "$SRC" apply "$PATCH" || die "couldn't apply $(basename "$PATCH")"
+fi
+
+# 2. Build + install.
+make -C "$SRC" >/dev/null || die "build failed"
+mkdir -p "$(dirname "$BIN")"
+cp -f "$SRC/bin/borders" "$BIN"
+info "Built $(basename "$BIN") from $BASE + $FIX → $BIN"
+
+# 3. Launch agent. PATH puts the patched binary first, so the `borders ...`
+#    call inside bordersrc talks to (and never replaces) this instance.
+cat > "$PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key><array><string>${BIN}</string></array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardErrorPath</key><string>/tmp/shiny.borders.err.log</string>
+</dict>
+</plist>
+PLIST
+
+# 4. Swap: stop Homebrew's service, start ours.
+brew services stop borders >/dev/null 2>&1 || true
+if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+  launchctl kickstart -k "gui/$(id -u)/${LABEL}"     # already loaded: restart on the new binary
+else
+  launchctl bootstrap "gui/$(id -u)" "$PLIST"
+fi
+info "Running as launch agent ${LABEL} (undo: shiny/libexec/install-borders --uninstall)."

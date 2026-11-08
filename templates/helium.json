@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "shiny: {{THEME}}",
+  "version": "{{VERSION}}",
+  "description": "Managed by shiny-theme.",
+  "theme": {
+    "colors": {
+      "frame": [{{BG_DARK_RGB}}],
+      "frame_inactive": [{{BG_DARK_RGB}}],
+      "frame_incognito": [{{BG_DARK_RGB}}],
+      "frame_incognito_inactive": [{{BG_DARK_RGB}}],
+      "toolbar": [{{BG_RGB}}],
+      "toolbar_text": [{{FG_RGB}}],
+      "toolbar_button_icon": [{{ACCENT_RGB}}],
+      "tab_text": [{{FG_RGB}}],
+      "tab_background_text": [{{COMMENT_RGB}}],
+      "tab_background_text_inactive": [{{MUTED_RGB}}],
+      "bookmark_text": [{{FG_DIM_RGB}}],
+      "omnibox_background": [{{BG_DARK_RGB}}],
+      "omnibox_text": [{{FG_RGB}}],
+      "ntp_background": [{{BG_RGB}}],
+      "ntp_text": [{{FG_RGB}}],
+      "ntp_link": [{{ACCENT_RGB}}],
+      "ntp_header": [{{SURFACE_RGB}}],
+      "background_tab": [{{BG_DARK_RGB}}],
+      "button_background": [0, 0, 0, 0]
+    },
+    "images": { "theme_ntp_background": "ntp.png" },
+    "properties": { "ntp_background_alignment": "center", "ntp_background_repeat": "no-repeat" }
+  }
+}

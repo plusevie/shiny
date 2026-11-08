@@ -1,0 +1,10 @@
+#!/bin/bash
+# managed by shiny-theme ({{THEME}}) — JankyBorders
+options=(
+  style=round
+  width=3.0
+  hidpi=on
+  active_color={{ACCENT_ARGB}}
+  inactive_color={{SURFACE_ARGB}}
+)
+borders "${options[@]}"

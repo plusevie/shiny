@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# install-fastmail — build libexec/fastmail-inject.swift and run it as the
+# shiny.fastmail launch agent, which keeps shiny's CSS injected into the
+# Fastmail desktop app (see the top of fastmail-inject.swift for how).
+#
+#   libexec/install-fastmail               build + install + start
+#   libexec/install-fastmail --uninstall   stop, remove; Fastmail goes back to stock
+#
+# Fastmail quits and reopens once when the agent starts or stops.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN="${HOME}/.local/bin/shiny-fastmail"
+LABEL="shiny.fastmail"
+PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
+CSS="${HOME}/Library/Application Support/shiny/fastmail.css"
+
+fastmail_running() { [[ "$(osascript -e 'application "Fastmail" is running' 2>/dev/null)" == true ]]; }
+# Fastmail quits when the agent it's piped to stops; bring it back after.
+reopen=0; fastmail_running && reopen=1
+
+info() { printf '\033[34;1m==>\033[0m %s\n' "$*"; }
+die()  { printf '\033[31;1m==> ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+
+if [[ "${1:-}" == "--uninstall" ]]; then
+  launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
+  rm -f "$PLIST" "$BIN" "$CSS"
+  ((reopen)) && { sleep 1; open -a Fastmail; }
+  info "Removed ${LABEL}. Fastmail is back to stock."
+  exit 0
+fi
+
+[[ -d /Applications/Fastmail.app ]] || die "Fastmail.app not installed (brew install --cask fastmail)."
+command -v swiftc >/dev/null 2>&1 || die "swiftc not found — install the Xcode Command Line Tools."
+
+mkdir -p "$(dirname "$BIN")" "$(dirname "$PLIST")"
+swiftc -O "${ROOT}/libexec/fastmail-inject.swift" -o "${BIN}.new" || die "build failed"
+mv -f "${BIN}.new" "$BIN"
+info "Built $(basename "$BIN") → $BIN"
+
+# The agent leaves Fastmail alone until there's CSS to inject.
+if [[ ! -f "$CSS" && -f "${HOME}/.config/shiny/current" ]]; then
+  theme="$(<"${HOME}/.config/shiny/current")"
+  tmp="$(mktemp -d)"
+  "${ROOT}/libexec/shiny-apply" --render "$theme" "$tmp" >/dev/null \
+    && mkdir -p "$(dirname "$CSS")" && cp "${tmp}/fastmail.css" "$CSS"
+  rm -rf "$tmp"
+fi
+
+cat > "$PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LABEL}</string>
+  <key>ProgramArguments</key><array><string>${BIN}</string><string>${CSS}</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardErrorPath</key><string>/tmp/shiny.fastmail.err.log</string>
+</dict>
+</plist>
+PLIST
+
+launchctl bootout "gui/$(id -u)/${LABEL}" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$PLIST"
+# A fresh agent takes over a running Fastmail itself; a restarted one took it down.
+((reopen)) && { sleep 2; fastmail_running || open -a Fastmail; }
+info "Running as launch agent ${LABEL} (undo: shiny/libexec/install-fastmail --uninstall)."
