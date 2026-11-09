@@ -157,8 +157,12 @@ run_bundle() {
   fi
 
   command -v brew >/dev/null 2>&1 || die "Homebrew isn't installed (run the Homebrew step)."
-  # Newer Homebrew refuses third-party taps until trusted (borders, sketchybar).
-  brew trust felixkratz/formulae >/dev/null 2>&1 || true
+  # Newer Homebrew refuses third-party taps until trusted: every tap the
+  # Brewfile names (user/tap/name entries).
+  local tap
+  for tap in $(brewfile_entries | awk -F'|' '{ n = split($2, p, "/"); if (n == 3) print p[1] "/" p[2] }' | sort -u); do
+    brew trust --tap "$tap" >/dev/null 2>&1 || true
+  done
   info "Updating Homebrew…"
   with_timeout 300 "brew update" brew update --quiet </dev/null \
     || warn "brew update failed — installing from the formulae already here."
@@ -182,7 +186,7 @@ run_bundle() {
         info "[${n}/${total}] ${name}"
         with_timeout "$BREW_TIMEOUT" "$name" brew install "$name" </dev/null || note "brew ${name}" ;;
       cask)
-        [[ "$casks" == *" ${name} "* ]] && continue
+        [[ "$casks" == *" ${name##*/} "* ]] && continue
         info "[${n}/${total}] ${name} (cask)"
         # --adopt takes over an app that's already in /Applications (installed by hand).
         with_timeout "$BREW_TIMEOUT" "$name" brew install --cask --adopt "$name" </dev/null || note "cask ${name}" ;;
@@ -223,28 +227,19 @@ set_defaults() {
   defaults write com.apple.AppleMultitouchMouse MouseButtonMode -string "TwoButton"
   defaults write com.apple.driver.AppleBluetoothMultitouch.mouse MouseButtonMode -string "TwoButton"
 
-  # Helium: "On startup → Continue where you left off", so theme switches can
-  # restart it without losing tabs. Chromium rewrites Preferences while it
-  # runs, so only while it's closed.
-  local hp="${HOME}/Library/Application Support/net.imput.helium/Default/Preferences"
-  if [[ -f "$hp" ]] && ! app_running Helium; then
-    /usr/bin/python3 -c 'import json, sys
-p = json.load(open(sys.argv[1])); p.setdefault("session", {})["restore_on_startup"] = 1
-json.dump(p, open(sys.argv[1], "w"), separators=(",", ":"))' "$hp" || warn "Couldn't set Helium's startup option."
-  fi
-
   # AeroSpace tiles windows (config is rendered by the theme step). Group
   # windows by app in Mission Control: AeroSpace hides windows off-screen
   # and ungrouped they show up tiny.
   defaults write com.apple.dock expose-group-apps -bool true
 
-  # Dark mode: every theme is built on it. System Events switches it live;
-  # the plain default needs a logout.
-  defaults delete -g AppleInterfaceStyleSwitchesAutomatically 2>/dev/null || true   # no "Auto"
-  if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != Dark ]]; then
-    osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' >/dev/null 2>&1 \
-      || defaults write -g AppleInterfaceStyle -string Dark
-  fi
+  # Dark mode, not Auto: every theme is built on it. The theme step switches
+  # it live; this alone needs a logout.
+  defaults write -g AppleInterfaceStyle -string Dark
+  defaults delete -g AppleInterfaceStyleSwitchesAutomatically 2>/dev/null || true
+
+  # ⌘Space is Alfred's (the theme step sets it there): Spotlight moves off it.
+  defaults write com.apple.symbolichotkeys AppleSymbolicHotKeys -dict-add 64 \
+    "<dict><key>enabled</key><false/><key>value</key><dict><key>parameters</key><array><integer>32</integer><integer>49</integer><integer>1048576</integer></array><key>type</key><string>standard</string></dict></dict>"
 
   # Finder
   defaults write com.apple.finder AppleShowAllFiles -bool true

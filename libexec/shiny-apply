@@ -235,6 +235,17 @@ alfred_prefs_dir() {
   printf '%s/Alfred.alfredpreferences' "$sync"
 }
 
+alfred_hotkey() { # ⌘Space opens Alfred (Spotlight's is turned off by setup), unless you've set one
+  local p
+  for p in "$1"/preferences/local/*; do
+    [[ -d "$p" && ! -f "${p}/hotkey/prefs.plist" ]] || continue
+    mkdir -p "${p}/hotkey"
+    plutil -create xml1 "${p}/hotkey/prefs.plist"
+    plutil -insert default -json '{"key":49,"mod":1048576,"string":" "}' "${p}/hotkey/prefs.plist"
+    RELAUNCH=1   # Alfred reads its hotkey at launch
+  done
+}
+
 install_alfred_workflow() { # unpack the `theme` workflow into Alfred's prefs; updates it in place
   local prefs="$1" wf="${ROOT}/alfred/shiny-theme.alfredworkflow" dir
   [[ -f "$wf" ]] || return 0
@@ -253,8 +264,16 @@ install_alfred_workflow() { # unpack the `theme` workflow into Alfred's prefs; u
 }
 
 apply_alfred() {
-  local prefs; prefs="$(alfred_prefs_dir)"
+  [[ -d "/Applications/Alfred 5.app" ]] || return 0
+  local prefs i; prefs="$(alfred_prefs_dir)"
+  # First run: Alfred writes its preferences (and the per-machine ones the
+  # theme and hotkey live in) when it first starts.
+  if ! compgen -G "${prefs}/preferences/local/*" >/dev/null; then
+    open -g -a "Alfred 5"
+    for ((i = 0; i < 60; i++)); do compgen -G "${prefs}/preferences/local/*" >/dev/null && break; sleep 0.5; done
+  fi
   [[ -d "$prefs" ]] || { warn "Alfred preferences not found — open Alfred once, then re-run."; return 0; }
+  alfred_hotkey "$prefs"
   install_alfred_workflow "$prefs"
   render alfred.json "${prefs}/themes/${ALFRED_THEME_UID}/theme.json"
   # Select it for both light and dark mode. The per-machine prefs live under
@@ -282,6 +301,15 @@ helium_restores_tabs() { # is "On startup → Continue where you left off" on?
 sys.exit(0 if json.load(open(sys.argv[1])).get("session", {}).get("restore_on_startup") == 1 else 1)' "$HELIUM_PREFS" 2>/dev/null
 }
 
+helium_restore_tabs() { # turn on "Continue where you left off" (only while it's closed: it rewrites the file)
+  mkdir -p "${HELIUM_PREFS%/*}"
+  [[ -f "$HELIUM_PREFS" ]] || echo '{}' > "$HELIUM_PREFS"   # before the first launch is fine: it keeps it
+  helium_restores_tabs && return 0
+  /usr/bin/python3 -c 'import json, sys
+p = json.load(open(sys.argv[1])); p.setdefault("session", {})["restore_on_startup"] = 1
+json.dump(p, open(sys.argv[1], "w"), separators=(",", ":"))' "$HELIUM_PREFS" || warn "Helium: couldn't turn on Continue where you left off."
+}
+
 helium_has_theme() { # is the theme extension installed (Load unpacked or --load-extension)?
   local d="${HELIUM_PREFS%/*}"
   /usr/bin/python3 -c 'import json, sys
@@ -306,6 +334,7 @@ apply_helium() {
   local args=() done="relaunched"
   helium_has_theme || { args=(--args "--load-extension=${HELIUM_DIR}"); done="relaunched with the theme installed"; }
   if ! app_running Helium; then
+    helium_restore_tabs
     if ((${#args[@]})); then
       open -g -a Helium "${args[@]}" && info "Helium: opened once to install the theme."
     else
@@ -357,7 +386,9 @@ apply_aerospace() {
   if pgrep -xq AeroSpace; then
     aerospace reload-config >/dev/null 2>&1 && info "AeroSpace: reloaded." || warn "AeroSpace: couldn't reload."
   else
-    info "AeroSpace: updated (not running; applies when it starts)."
+    # First run: start it (it then starts itself at login). macOS asks for
+    # Accessibility once; it tiles as soon as that's allowed.
+    open -g -a AeroSpace && info "AeroSpace: started (allow it in Privacy & Security → Accessibility if asked)."
   fi
 }
 
@@ -420,10 +451,12 @@ apply_macos() {
   old_accent="$(defaults read -g AppleAccentColor 2>/dev/null || echo 99)"
   old_tint="$(defaults read -g AppleIconAppearanceCustomTintColor 2>/dev/null || true)"
   if tool="$(native_tool appearance Foundation CoreGraphics)"; then
-    "$tool" --accent "$ACCENT_PRESET" --highlight "$(hex_float "$ACCENT")" --tint "$new_tint" \
+    "$tool" --dark --accent "$ACCENT_PRESET" --highlight "$(hex_float "$ACCENT")" --tint "$new_tint" \
       || warn "macOS: couldn't set appearance via System Settings' API."
   else
     warn "macOS: clang not found (Xcode CLT) — falling back to defaults; some apps need a relaunch."
+    defaults write -g AppleInterfaceStyle -string Dark
+    defaults delete -g AppleInterfaceStyleSwitchesAutomatically 2>/dev/null || true
     defaults write -g AppleAccentColor -int "$ACCENT_PRESET"
     defaults write -g AppleHighlightColor -string "$(hex_float "$ACCENT") Other"
     defaults write -g AppleIconAppearanceTintColor -string Other
@@ -438,7 +471,7 @@ apply_macos() {
   if [[ "$old_tint" != "$new_tint" || "$old_accent" != "$ACCENT_PRESET" ]]; then
     ICON_TINT_CHANGED=1   # Alfred caches app icons: restarted at the end
   fi
-  info "macOS: accent preset ${ACCENT_PRESET}, text highlight ${ACCENT}, icon tint ${tint}."
+  info "macOS: dark mode, accent preset ${ACCENT_PRESET}, text highlight ${ACCENT}, icon tint ${tint}."
 }
 
 apply_wallpaper() {

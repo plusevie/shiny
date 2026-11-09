@@ -24,7 +24,12 @@ die()  { printf '%s==> ERROR:%s %s\n' "$R$B" "$N" "$*" >&2; exit 1; }
 # git comes with the Xcode Command Line Tools.
 if ! xcode-select -p >/dev/null 2>&1; then
   xcode-select --install 2>/dev/null || true
-  die "Install the Command Line Tools from the dialog that just opened, then run this again."
+  info "Waiting for the Command Line Tools — click Install in the dialog that just opened…"
+  waited=0
+  until xcode-select -p >/dev/null 2>&1; do
+    sleep 5; waited=$((waited + 5))
+    ((waited < 1800)) || die "Still no Command Line Tools after 30 min — cancelled? Run this again once they're in."
+  done
 fi
 
 # A stalled transfer gives up instead of hanging forever.

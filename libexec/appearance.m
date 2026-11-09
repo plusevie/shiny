@@ -1,14 +1,16 @@
 // appearance.m — set macOS accent, text highlight and icon tint the way
 // System Settings does, so running apps / Dock / widgets update live.
 //
-//   appearance [--accent N] [--highlight "r g b"] [--tint "r g b a"]
+//   appearance [--dark] [--accent N] [--highlight "r g b"] [--tint "r g b a"]
 //   appearance --read
 //
 // `defaults write` alone only changes the stored value: nothing is told.
 // Icon tint goes through SkyLight's SLSIconAppearanceConfiguration (what the
 // Appearance pane uses; -save broadcasts the change to the window server).
 // Accent/highlight are written to the global domain, then the same distributed
-// notifications the Appearance pane posts are sent.
+// notifications the Appearance pane posts are sent. --dark switches to Dark
+// (not Auto) through SkyLight too: live, and no Automation prompt like
+// System Events' "set dark mode".
 //
 // Built on demand by shiny-apply with: clang -fobjc-arc -framework Foundation
 //   -framework CoreGraphics appearance.m -o appearance
@@ -62,6 +64,14 @@ int main(int argc, char **argv) {
         if (col) { const CGFloat *k = CGColorGetComponents(col);
           for (size_t j = 0; j < CGColorGetNumberOfComponents(col); j++) printf(" %.4f", k[j]); }
         printf("\n"); continue;
+      }
+      if ([a isEqual:@"--dark"]) {
+        void (*autoSwitch)(BOOL) = dlsym(RTLD_DEFAULT, "SLSSetAppearanceThemeSwitchesAutomatically");
+        void (*setDark)(BOOL) = dlsym(RTLD_DEFAULT, "SLSSetAppearanceThemeLegacy");
+        if (!setDark) { fprintf(stderr, "appearance: no SLSSetAppearanceThemeLegacy\n"); return 1; }
+        if (autoSwitch) autoSwitch(NO);
+        setDark(YES);
+        continue;
       }
       if (i + 1 >= argc) { fprintf(stderr, "appearance: %s needs a value\n", argv[i]); return 2; }
       const char *v = argv[++i];

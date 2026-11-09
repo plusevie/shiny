@@ -14,11 +14,19 @@ curl -fsSL https://raw.githubusercontent.com/plusevie/shiny/main/install.sh | ba
 
 clones shiny to `~/.local/share/shiny` and puts a `shiny` command on your PATH. run it again to update (or `shiny update`).
 
+a new mac, start to finish (asks for your password once; then only macOS's own prompts: the Command Line Tools dialog, and Accessibility for AeroSpace):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/plusevie/shiny/main/install.sh | bash && shiny setup --yes
+```
+
+App Store apps install only if you're already signed in to the App Store (`mas` can't sign in for you); re-run `shiny setup` after signing in to get them.
+
 ## use
 
 ```sh
 shiny                       # the TUI: browse/apply themes, build new ones from an image
-shiny setup                 # apps (Brewfile), defaults (dark mode, Dock on the left), Dock, patched borders, theme — safe to re-run
+shiny setup                 # apps (Brewfile), defaults (dark mode, Dock on the left, ⌘Space → Alfred), Dock, patched borders, theme — safe to re-run
 shiny setup --yes           # same, no prompts
 
 shiny theme list            # * = current
@@ -57,10 +65,10 @@ full guide to making and tuning themes: [THEMES.md](THEMES.md).
 
 stock themes live in `themes/`, yours in `~/.config/shiny/themes/` (yours win if names clash).
 
-**what a theme touches:** ghostty, jankyborders, alfred, helium, beeper, macos accent / text highlight / icon tint, wallpaper.
+**what a theme touches:** ghostty, jankyborders, alfred, helium, beeper, aerospace, sketchybar, macos dark mode / accent / text highlight / icon tint, wallpaper.
 
-- **alfred:** shiny installs its workflow into Alfred's preferences (needs the Powerpack); type `theme` to switch.
-- **helium:** the first theme apply opens helium once with `--load-extension` to install the theme (it sticks after that, no *Load unpacked*). chromium only reads a theme at launch, so shiny relaunches helium on a switch — but only when *On startup → Continue where you left off* is on (`shiny setup` turns it on while helium is closed), so you never lose tabs. otherwise restart it yourself (`SHINY_RESTART_HELIUM=1` forces it).
+- **alfred:** shiny starts alfred once if it's never run, puts it on ⌘Space (unless you've set a hotkey) and installs its workflow (needs the Powerpack); type `theme` to switch.
+- **helium:** the first theme apply opens helium once with `--load-extension` to install the theme (it sticks after that, no *Load unpacked*). chromium only reads a theme at launch, so shiny relaunches helium on a switch — but only when *On startup → Continue where you left off* is on (shiny turns it on whenever helium is closed, before its first launch too), so you never lose tabs. otherwise restart it yourself (`SHINY_RESTART_HELIUM=1` forces it).
 - **macos text highlight:** apps pick it up when they next launch; shiny relaunches finder for you.
 - **beeper:** themed through its `custom.css`, live.
 - **speed:** everything except the macOS recolour runs in parallel; `SHINY_TIMINGS=1 shiny theme set <name>` prints how long each app took.
