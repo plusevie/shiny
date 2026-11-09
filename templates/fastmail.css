@@ -127,7 +127,7 @@ html:root.t-dark, html:root.t-light, html:root .t-dark.t-dark, html:root .t-ligh
   --ui-memo-color-fg: {{FG}} !important;
 }
 
-html:root { background: {{BG}}{{MATERIAL_ALPHA_HEX}} !important; }
+html:root { background: {{MATERIAL_WASH}}{{MATERIAL_ALPHA_HEX}} !important; }
 ::selection { background: rgba({{ACCENT_RGB}}, .35); }
 
 /* Floating bars. Fastmail paints these with --ui-page-color-bg (55% above) or

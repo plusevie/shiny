@@ -49,7 +49,8 @@
   --color-background-message-bubble-received: {{SURFACE}} !important;
 }
 
-html, body { background: {{BG}}{{MATERIAL_ALPHA_HEX}} !important; }
+/* painted on both html and body, so each gets the two-layer alpha */
+html, body { background: {{MATERIAL_WASH}}{{MATERIAL_ALPHA2_HEX}} !important; }
 
 /* Floating surfaces. Beeper paints these with --appearance-color-bg-primary,
    which is transparent above (for the glass panes), so the Cmd+K bar, tooltips,

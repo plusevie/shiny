@@ -88,6 +88,18 @@ hex_float() { # "r g b" as 0–1 floats, the format AppleHighlightColor wants
     'BEGIN { printf "%.6f %.6f %.6f", r/255, g/255, b/255 }'
 }
 
+material_wash() { # MATERIAL_WASH + MATERIAL_ALPHA_HEX: the tint over macOS vibrancy (Beeper, Fastmail)
+  # Vibrancy adds its own grey (VIBRANCY_GREY) and shows VIBRANCY_SHOW of the
+  # backdrop; Ghostty is OPACITY·BG plus GHOSTTY_SHOW of it. Pick the weakest
+  # wash that brings vibrancy down to Ghostty's level across typical (blurred)
+  # wallpapers, then the colour that lands on Ghostty's tint. A fixed wash only
+  # matches one background lightness (it was tuned on fire; darker themes came
+  # out grey and too light).
+  local out
+  out="$(/usr/bin/python3 "${ROOT}/libexec/material-wash.py" "$BG" "$OPACITY" "$VIBRANCY_GREY" "$VIBRANCY_SHOW" "$GHOSTTY_SHOW")" || die "couldn't work out the vibrancy wash"
+  read -r MATERIAL_WASH MATERIAL_ALPHA_HEX MATERIAL_ALPHA2_HEX <<<"$out"
+}
+
 load_theme() {
   THEME="$1"
   THEME_DIR="$(theme_dir "$THEME")" || die "No such theme: ${THEME} (try: shiny theme list)"
@@ -103,8 +115,8 @@ load_theme() {
   BAR_Y_OFFSET="$(awk -v g="$WINDOW_GAP" 'BEGIN { print g / 2 }')"   # SketchyBar's y_offset counts double
   ALPHA_HEX="$(alpha_hex "$OPACITY")"
   ALFRED_ALPHA_HEX="$(alpha_hex "${ALFRED_OPACITY:-$OPACITY}")"
-  MATERIAL_ALPHA_HEX="$(alpha_hex "${MATERIAL_OPACITY:-$OPACITY}")"
-  CIDER_ALPHA_HEX="$(alpha_hex "${CIDER_OPACITY:-${MATERIAL_OPACITY:-$OPACITY}}")"
+  CIDER_ALPHA_HEX="$(alpha_hex "${CIDER_OPACITY:-$OPACITY}")"
+  material_wash
   local r h
   for r in "${COLOR_ROLES[@]}"; do
     [[ "${!r:-}" =~ ^#[0-9A-Fa-f]{6}$ ]] || die "${THEME}: ${r} missing or not #RRGGBB (see: shiny theme check ${THEME})"
@@ -125,7 +137,7 @@ load_theme() {
   local var v
   for var in THEME GHOSTTY_THEME VERSION ACCENT_HUE OPACITY BLUR ALFRED_BLUR ALPHA_HEX ALFRED_ALPHA_HEX \
              WINDOW_GAP BAR_HEIGHT BAR_Y_OFFSET \
-             MATERIAL_ALPHA_HEX CIDER_ALPHA_HEX "${COLOR_ROLES[@]}" \
+             MATERIAL_WASH MATERIAL_ALPHA_HEX MATERIAL_ALPHA2_HEX CIDER_ALPHA_HEX "${COLOR_ROLES[@]}" \
              $(printf '%s_RGB ' "${COLOR_ROLES[@]}") $(printf '%s_ARGB ' "${COLOR_ROLES[@]}"); do
     v="${!var}"; v="${v//\\/\\\\}"; v="${v//|/\\|}"; v="${v//&/\\&}"
     printf 's|{{%s}}|%s|g\n' "$var" "$v"

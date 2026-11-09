@@ -82,6 +82,6 @@ plus: every role is `#RRGGBB`, the ghostty theme exists, the wallpaper exists, A
 
 ## templates (for changing how *every* theme looks)
 
-`templates/*` are the app configs with `{{PLACEHOLDERS}}`: any role (`{{ACCENT}}` → `#7AA2F7`), `{{ROLE_RGB}}` (`122, 162, 247`), `{{ROLE_ARGB}}` (`0xff7aa2f7`), plus `THEME`, `GHOSTTY_THEME`, `OPACITY`, `BLUR`, `ALFRED_BLUR`, `ALPHA_HEX`, `ALFRED_ALPHA_HEX`, `MATERIAL_ALPHA_HEX`, `CIDER_ALPHA_HEX`, `ACCENT_HUE`, `VERSION`. an unknown placeholder stops the apply. `libexec/shiny-apply --render <name> <dir>` renders everything into a folder without touching any app — use it to diff a template change across themes.
+`templates/*` are the app configs with `{{PLACEHOLDERS}}`: any role (`{{ACCENT}}` → `#7AA2F7`), `{{ROLE_RGB}}` (`122, 162, 247`), `{{ROLE_ARGB}}` (`0xff7aa2f7`), plus `THEME`, `GHOSTTY_THEME`, `OPACITY`, `BLUR`, `ALFRED_BLUR`, `ALPHA_HEX`, `ALFRED_ALPHA_HEX`, `MATERIAL_WASH`, `MATERIAL_ALPHA_HEX`, `CIDER_ALPHA_HEX`, `ACCENT_HUE`, `VERSION`. an unknown placeholder stops the apply. `libexec/shiny-apply --render <name> <dir>` renders everything into a folder without touching any app — use it to diff a template change across themes.
 
 to theme a new app: add a template, an `apply_<app>` function in `libexec/shiny-apply`, and the app's name to `TARGETS` there.
