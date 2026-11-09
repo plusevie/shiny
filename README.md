@@ -18,7 +18,7 @@ clones shiny to `~/.local/share/shiny` and puts a `shiny` command on your PATH. 
 
 ```sh
 shiny                       # the TUI: browse/apply themes, build new ones from an image
-shiny setup                 # apps (Brewfile), defaults, Dock, patched borders, theme — safe to re-run
+shiny setup                 # apps (Brewfile), defaults (dark mode, Dock on the left), Dock, patched borders, theme — safe to re-run
 shiny setup --yes           # same, no prompts
 
 shiny theme list            # * = current
@@ -59,8 +59,8 @@ stock themes live in `themes/`, yours in `~/.config/shiny/themes/` (yours win if
 
 **what a theme touches:** ghostty, jankyborders, alfred, helium, beeper, macos accent / text highlight / icon tint, wallpaper.
 
-- **alfred:** `open ~/.local/share/shiny/alfred/shiny-theme.alfredworkflow` once, then type `theme` to switch.
-- **helium:** one-time *Load unpacked* of `~/Library/Application Support/shiny/helium-theme` in `chrome://extensions` (developer mode). chromium only reads a theme at launch, so shiny relaunches helium on a switch — but only when *On startup → Continue where you left off* is on (`shiny setup` turns it on while helium is closed), so you never lose tabs. otherwise restart it yourself (`SHINY_RESTART_HELIUM=1` forces it).
+- **alfred:** shiny installs its workflow into Alfred's preferences (needs the Powerpack); type `theme` to switch.
+- **helium:** the first theme apply opens helium once with `--load-extension` to install the theme (it sticks after that, no *Load unpacked*). chromium only reads a theme at launch, so shiny relaunches helium on a switch — but only when *On startup → Continue where you left off* is on (`shiny setup` turns it on while helium is closed), so you never lose tabs. otherwise restart it yourself (`SHINY_RESTART_HELIUM=1` forces it).
 - **macos text highlight:** apps pick it up when they next launch; shiny relaunches finder for you.
 - **beeper:** themed through its `custom.css`, live.
 - **speed:** everything except the macOS recolour runs in parallel; `SHINY_TIMINGS=1 shiny theme set <name>` prints how long each app took.

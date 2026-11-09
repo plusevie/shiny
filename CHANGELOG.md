@@ -3,6 +3,9 @@
 ## unreleased
 
 - AeroSpace tiling (Option key) replaces Rectangle; the bar shows AeroSpace workspaces
+- AeroSpace installs from its own tap (`nikitabobko/tap/aerospace`): plain `aerospace` isn't in Homebrew, so it was skipped
+- Helium theme and the Alfred `theme` workflow install themselves on the first theme apply (no Load unpacked / workflow import)
+- setup turns on dark mode (what every theme builds on) and puts the Dock on the left
 - glass: per-theme wash over macOS vibrancy (Beeper, Fastmail), measured on black/grey/white
 - setup failsafes: each step runs on its own (summary at the end, log in `~/Library/Logs/shiny`), Brewfile installs one entry at a time with timeouts, apps that aren't installed no longer stall the theme for 2 min
 

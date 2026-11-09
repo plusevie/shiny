@@ -235,9 +235,27 @@ alfred_prefs_dir() {
   printf '%s/Alfred.alfredpreferences' "$sync"
 }
 
+install_alfred_workflow() { # unpack the `theme` workflow into Alfred's prefs; updates it in place
+  local prefs="$1" wf="${ROOT}/alfred/shiny-theme.alfredworkflow" dir
+  [[ -f "$wf" ]] || return 0
+  dir="$(grep -l '<string>shiny.theme-switcher</string>' "${prefs}"/workflows/*/info.plist 2>/dev/null | head -1)"
+  if [[ -n "$dir" ]]; then
+    dir="${dir%/info.plist}"
+    unzip -p "$wf" info.plist | cmp -s - "${dir}/info.plist" && return 0
+  else
+    dir="${prefs}/workflows/user.workflow.$(uuidgen)"
+  fi
+  mkdir -p "$dir" && unzip -qo "$wf" -d "$dir" || { warn "Alfred: couldn't install the theme workflow."; return 0; }
+  if app_running "Alfred 5" || app_running Alfred; then
+    osascript -e 'tell application id "com.runningwithcrayons.Alfred" to reload workflow "shiny.theme-switcher"' >/dev/null 2>&1 || true
+  fi
+  info "Alfred: installed the theme workflow (type \`theme\`; needs the Powerpack)."
+}
+
 apply_alfred() {
   local prefs; prefs="$(alfred_prefs_dir)"
   [[ -d "$prefs" ]] || { warn "Alfred preferences not found — open Alfred once, then re-run."; return 0; }
+  install_alfred_workflow "$prefs"
   render alfred.json "${prefs}/themes/${ALFRED_THEME_UID}/theme.json"
   # Select it for both light and dark mode. The per-machine prefs live under
   # preferences/local/<machine hash>/ — only exists once Alfred has run here.
@@ -264,7 +282,18 @@ helium_restores_tabs() { # is "On startup → Continue where you left off" on?
 sys.exit(0 if json.load(open(sys.argv[1])).get("session", {}).get("restore_on_startup") == 1 else 1)' "$HELIUM_PREFS" 2>/dev/null
 }
 
+helium_has_theme() { # is the theme extension installed (Load unpacked or --load-extension)?
+  local d="${HELIUM_PREFS%/*}"
+  /usr/bin/python3 -c 'import json, sys
+for f in sys.argv[2:]:
+    try: s = json.load(open(f)).get("extensions", {}).get("settings", {})
+    except Exception: continue
+    if any(v.get("path") == sys.argv[1] for v in s.values()): sys.exit(0)
+sys.exit(1)' "$HELIUM_DIR" "${d}/Preferences" "${d}/Secure Preferences" 2>/dev/null
+}
+
 apply_helium() {
+  [[ -d /Applications/Helium.app ]] || return 0
   mkdir -p "$HELIUM_DIR"
   # Helium windows can't be see-through: new tab page gets a frosted wallpaper.
   local f; f="$(frost)" && cp -f "$f" "${HELIUM_DIR}/ntp.png" || rm -f "${HELIUM_DIR}/ntp.png"
@@ -272,16 +301,31 @@ apply_helium() {
   # Chromium only re-reads an unpacked theme at launch, and starts from its
   # compiled "Cached Theme.pak" even when the files changed: drop the cache.
   rm -f "${HELIUM_DIR}/Cached Theme.pak"
-  app_running Helium || { info "Helium: updated (applies on next launch)."; return 0; }
+  # First run: one launch with --load-extension installs the theme for good
+  # (it stays after relaunching without the flag), so no Load unpacked.
+  local args=() done="relaunched"
+  helium_has_theme || { args=(--args "--load-extension=${HELIUM_DIR}"); done="relaunched with the theme installed"; }
+  if ! app_running Helium; then
+    if ((${#args[@]})); then
+      open -g -a Helium "${args[@]}" && info "Helium: opened once to install the theme."
+    else
+      info "Helium: updated (applies on next launch)."
+    fi
+    return 0
+  fi
   # Relaunching only keeps your tabs with "Continue where you left off" on.
   if ! helium_restores_tabs && [[ "${SHINY_RESTART_HELIUM:-0}" != 1 ]]; then
-    info "Helium: updated — restart it to see the theme (turn on Settings → On startup → Continue where you left off and shiny restarts it for you)."
+    if ((${#args[@]})); then
+      warn "Helium: quit it and run \`shiny theme set ${THEME}\` again to install the theme (or set SHINY_RESTART_HELIUM=1)."
+    else
+      info "Helium: updated — restart it to see the theme (turn on Settings → On startup → Continue where you left off and shiny restarts it for you)."
+    fi
     return 0
   fi
   curtain_say "Restarting Helium…"
   if quit_app Helium 8; then
     rm -f "${HELIUM_DIR}/Cached Theme.pak"   # it may have rewritten it while quitting
-    open -a Helium && info "Helium: relaunched."
+    open -a Helium ${args[@]+"${args[@]}"} && info "Helium: ${done}."
   else
     warn "Helium didn't quit (download in progress?) — the theme applies next time you restart it."
   fi

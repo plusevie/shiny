@@ -238,6 +238,14 @@ json.dump(p, open(sys.argv[1], "w"), separators=(",", ":"))' "$hp" || warn "Coul
   # and ungrouped they show up tiny.
   defaults write com.apple.dock expose-group-apps -bool true
 
+  # Dark mode: every theme is built on it. System Events switches it live;
+  # the plain default needs a logout.
+  defaults delete -g AppleInterfaceStyleSwitchesAutomatically 2>/dev/null || true   # no "Auto"
+  if [[ "$(defaults read -g AppleInterfaceStyle 2>/dev/null)" != Dark ]]; then
+    osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' >/dev/null 2>&1 \
+      || defaults write -g AppleInterfaceStyle -string Dark
+  fi
+
   # Finder
   defaults write com.apple.finder AppleShowAllFiles -bool true
   defaults write -g AppleShowAllExtensions -bool true
@@ -255,6 +263,7 @@ json.dump(p, open(sys.argv[1], "w"), separators=(",", ":"))' "$hp" || warn "Coul
   defaults write com.apple.dock autohide-time-modifier -float 0.15
   defaults write com.apple.dock expose-animation-duration -float 0.1
   defaults write com.apple.dock show-recents -bool false
+  defaults write com.apple.dock orientation -string left
   # Ctrl+1…9 → Switch to Desktop N (SketchyBar's desktop pills send these).
   local n code codes=(18 19 20 21 23 22 26 28 25)
   for n in 0 1 2 3 4 5 6 7 8; do
