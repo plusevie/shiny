@@ -42,7 +42,9 @@ current_theme() { [[ -f "${STATE_DIR}/current" ]] && cat "${STATE_DIR}/current" 
 is_user_theme() { [[ -f "${USER_THEMES}/$1/palette.sh" ]]; }
 palette_get() { grep -E "^$2=" "$1/palette.sh" | head -1 | cut -d'"' -f2; }   # palette_get <dir> <KEY>
 
-app_running() { [[ "$(osascript -e "application \"$1\" is running" 2>/dev/null)" == true ]]; }
+# `open -Ra` first: asked about an app that isn't installed, osascript blocks
+# ~2 min (or pops a "Where is X?" chooser and waits forever).
+app_running() { open -Ra "$1" 2>/dev/null && [[ "$(osascript -e "application \"$1\" is running" 2>/dev/null)" == true ]]; }
 
 now_ms() { local t; t="$(date +%s%N 2>/dev/null)"; [[ "$t" == *N ]] && echo $(( $(date +%s) * 1000 )) || echo $(( t / 1000000 )); }
 

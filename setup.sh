@@ -62,6 +62,19 @@ BREWFILE="${SCRIPT_DIR}/Brewfile"
 source "${SCRIPT_DIR}/libexec/lib.sh"   # info/warn/die, colours, banner
 BOLD="$B"; RESET="$N"
 
+# Failsafes: per-entry limits for Homebrew/App Store installs (seconds), and
+# stalled git transfers (brew update, the borders build) give up instead of
+# hanging forever.
+BREW_TIMEOUT="${SHINY_BREW_TIMEOUT:-1200}"
+MAS_TIMEOUT="${SHINY_MAS_TIMEOUT:-3600}"     # Xcode is ~10 GB
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60 HOMEBREW_CURL_RETRIES=3
+
+# Everything is logged too, so a failed run can be read back afterwards.
+LOG_DIR="${HOME}/Library/Logs/shiny"; mkdir -p "$LOG_DIR"
+LOG="${LOG_DIR}/setup-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee -a "$LOG") 2>&1
+NOTES="$(mktemp "${TMPDIR:-/tmp}/shiny-setup.XXXXXX")"   # what didn't install, across step subshells
+
 echo; banner; echo
 
 [[ "$(uname -s)" == "Darwin" ]] || die "macOS only."
@@ -72,7 +85,25 @@ info "This script needs sudo for Homebrew, hostname, and a few system settings."
 sudo -v
 while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
 SUDO_KEEPALIVE_PID=$!
-trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true' EXIT
+trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true; rm -f "$NOTES"' EXIT
+
+note() { printf '%s\n' "$*" >> "$NOTES"; }   # note <line> — listed in the summary
+
+with_timeout() { # with_timeout <secs> <label> <cmd…> — gives up after secs (SIGKILL 30s later)
+  local secs="$1" label="$2" rc=0; shift 2
+  timeout -k 30 "$secs" "$@" || rc=$?
+  ((rc == 124 || rc == 137)) && warn "${label}: gave up after ${secs}s."
+  return "$rc"
+}
+
+load_brew_env() { # put brew on PATH in this shell (Apple Silicon, then Intel)
+  local b
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    [[ -x "$b" ]] && { BREW_BIN="$b"; eval "$("$b" shellenv)"; return 0; }
+  done
+  return 1
+}
+load_brew_env || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. XCLT
@@ -85,7 +116,11 @@ install_clt() {
   info "Installing Xcode Command Line Tools (a GUI dialog will appear)…"
   xcode-select --install || true
   info "Waiting for CLT install to finish — complete the dialog if prompted…"
-  until xcode-select -p >/dev/null 2>&1; do sleep 5; done
+  local waited=0
+  until xcode-select -p >/dev/null 2>&1; do
+    sleep 5; waited=$((waited + 5))
+    ((waited < 1800)) || die "Still no Command Line Tools after 30 min — cancelled? Run again once they're in."
+  done
   info "Xcode CLT installed."
 }
 
@@ -95,19 +130,16 @@ install_clt() {
 install_brew() {
   if ! command -v brew >/dev/null 2>&1; then
     info "Installing Homebrew…"
-    NONINTERACTIVE=1 /bin/bash -c \
-      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    local script
+    script="$(curl -fsSL --max-time 60 --retry 2 https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
+      || die "Couldn't download the Homebrew installer — check your connection."
+    NONINTERACTIVE=1 with_timeout 1800 "Homebrew install" /bin/bash -c "$script" \
+      || die "Homebrew's installer failed (see above)."
   fi
 
-  # Load brew into this shell, and persist for future logins.
-  if [[ -x /opt/homebrew/bin/brew ]]; then
-    BREW_BIN=/opt/homebrew/bin/brew          # Apple Silicon
-  elif [[ -x /usr/local/bin/brew ]]; then
-    BREW_BIN=/usr/local/bin/brew             # Intel
-  else
-    die "Homebrew installed but brew binary not found."
-  fi
-  eval "$("$BREW_BIN" shellenv)"
+  # Load brew into this shell (the main shell reloads it after this step), and
+  # persist for future logins.
+  load_brew_env || die "Homebrew installed but brew binary not found."
   if ! grep -q 'brew shellenv' "${HOME}/.zprofile" 2>/dev/null; then
     echo "eval \"\$(${BREW_BIN} shellenv)\"" >> "${HOME}/.zprofile"
   fi
@@ -124,15 +156,53 @@ run_bundle() {
     read -r -p "Press Enter once you're signed in (or to skip MAS apps)… " _
   fi
 
-  info "Running brew bundle from ${BREWFILE}…"
+  command -v brew >/dev/null 2>&1 || die "Homebrew isn't installed (run the Homebrew step)."
   # Newer Homebrew refuses third-party taps until trusted (borders, sketchybar).
   brew trust felixkratz/formulae >/dev/null 2>&1 || true
-  brew bundle --file="$BREWFILE" || warn "brew bundle reported errors — check output above."
+  info "Updating Homebrew…"
+  with_timeout 300 "brew update" brew update --quiet </dev/null \
+    || warn "brew update failed — installing from the formulae already here."
+  export HOMEBREW_NO_AUTO_UPDATE=1   # once is enough, not before every entry
 
-  # dockutil is required by the dock step; ensure it's here regardless of Brewfile.
-  command -v dockutil >/dev/null 2>&1 || brew install dockutil
-  # wallpaper (sindresorhus/macos-wallpaper) is required by the theme step; ensure it's here regardless of Brewfile.
-  command -v wallpaper >/dev/null 2>&1 || brew install wallpaper
+  # One entry at a time instead of `brew bundle`: it has no timeout, doesn't
+  # say which entry is stuck, and upgrades everything already installed (slow
+  # for the big App Store apps). Installed entries are skipped — `brew upgrade`
+  # / `mas upgrade` when you want updates.
+  local formulae casks mas_ids kind name id n=0 total
+  formulae=" $(brew list --formula -1 | tr '\n' ' ') "
+  casks=" $(brew list --cask -1 | tr '\n' ' ') "
+  mas_ids=" $(mas list 2>/dev/null | awk '{ print $1 }' | tr '\n' ' ') "
+  total="$(brewfile_entries | wc -l | tr -d ' ')"
+  info "Installing from ${BREWFILE} (${BREW_TIMEOUT}s limit per app, ${MAS_TIMEOUT}s per App Store app)…"
+  while IFS='|' read -r -u 3 kind name id; do
+    n=$((n + 1))
+    case "$kind" in
+      brew)
+        [[ "$formulae" == *" ${name##*/} "* ]] && continue
+        info "[${n}/${total}] ${name}"
+        with_timeout "$BREW_TIMEOUT" "$name" brew install "$name" </dev/null || note "brew ${name}" ;;
+      cask)
+        [[ "$casks" == *" ${name} "* ]] && continue
+        info "[${n}/${total}] ${name} (cask)"
+        # --adopt takes over an app that's already in /Applications (installed by hand).
+        with_timeout "$BREW_TIMEOUT" "$name" brew install --cask --adopt "$name" </dev/null || note "cask ${name}" ;;
+      mas)
+        [[ "$mas_ids" == *" ${id} "* ]] && continue
+        info "[${n}/${total}] ${name} (App Store)"
+        # mas 7 installs through sudo, kept warm above.
+        with_timeout "$MAS_TIMEOUT" "$name" mas install "$id" </dev/null || note "mas ${name} (${id})" ;;
+    esac
+  done 3< <(brewfile_entries)
+
+  # dockutil (dock step) and wallpaper (theme step) are needed regardless of the Brewfile.
+  command -v dockutil >/dev/null 2>&1 || with_timeout "$BREW_TIMEOUT" dockutil brew install dockutil </dev/null || note "brew dockutil"
+  command -v wallpaper >/dev/null 2>&1 || with_timeout "$BREW_TIMEOUT" wallpaper brew install wallpaper </dev/null || note "brew wallpaper"
+  return 0
+}
+
+brewfile_entries() { # → kind|name|id per Brewfile line (id only for mas)
+  sed -nE -e 's/^[[:space:]]*(brew|cask)[[:space:]]+"([^"]+)".*/\1|\2|/p' \
+          -e 's/^[[:space:]]*mas[[:space:]]+"([^"]+)",[[:space:]]*id:[[:space:]]*([0-9]+).*/mas|\1|\2/p' "$BREWFILE"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -264,7 +334,7 @@ write_hosts() {
   # StevenBlack porn + social blocklist. Idempotent: keeps the very first
   # backup, only rewrites (and flushes DNS) when the list actually changed.
   local tmp; tmp="$(mktemp)"
-  curl -fsSL https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-social/hosts -o "$tmp" \
+  curl -fsSL --max-time 180 --retry 2 https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/porn-social/hosts -o "$tmp" \
     || { warn "Couldn't download the hosts blocklist — skipping."; rm -f "$tmp"; return; }
   if cmp -s "$tmp" /etc/hosts; then
     info "Hosts blocklist already up to date."
@@ -284,8 +354,9 @@ write_hosts() {
 # ─────────────────────────────────────────────────────────────────────────────
 set_theme() {
   # Theme switches only restart what's already running, so start the bar here.
-  command -v sketchybar >/dev/null 2>&1 && brew services start sketchybar >/dev/null 2>&1 || true
-  "${SCRIPT_DIR}/libexec/shiny-apply" "$THEME" || warn "Theme '${THEME}' didn't fully apply — see above."
+  command -v sketchybar >/dev/null 2>&1 && timeout 60 brew services start sketchybar >/dev/null 2>&1 || true
+  with_timeout 600 "Theme" "${SCRIPT_DIR}/libexec/shiny-apply" "$THEME" \
+    || { warn "Theme '${THEME}' didn't fully apply — see above."; return 1; }
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -343,27 +414,54 @@ step_enabled() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Run
 # ─────────────────────────────────────────────────────────────────────────────
+# run_step <label> <cmd…> — each step runs in its own subshell with errexit, so
+# a failure stops that step only; it's reported in the summary and the rest run.
+STEP_RESULTS=()
+FAILED=0
+run_step() {
+  local label="$1" rc=0 t0=$SECONDS why; shift
+  echo; info "${B}${label}${N}"
+  set +e; ( set -e; "$@" ); rc=$?; set -e
+  if ((rc == 0)); then
+    STEP_RESULTS+=("ok      ${label} ($((SECONDS - t0))s)")
+  else
+    why="exit ${rc}"; ((rc != 124)) || why="timed out"
+    STEP_RESULTS+=("FAILED  ${label} (${why})"); FAILED=1
+  fi
+}
+
 choose_recipe
 
-step_enabled clt      && install_clt
-step_enabled brew     && { install_brew; run_bundle; }
-step_enabled defaults && set_defaults
-step_enabled dock     && set_dock
-step_enabled hostname && set_hostname
-step_enabled hosts    && write_hosts
-step_enabled borders  && { "${SCRIPT_DIR}/libexec/install-borders" || warn "Patched borders failed — Homebrew borders still works."; }
-step_enabled fastmail && { "${SCRIPT_DIR}/libexec/install-fastmail" || warn "Fastmail theming failed — Fastmail itself is untouched."; }
-step_enabled theme    && set_theme
+step_enabled clt      && run_step "Xcode Command Line Tools" install_clt
+step_enabled brew     && { run_step "Homebrew" install_brew; load_brew_env || true; run_step "Brewfile apps" run_bundle; }
+step_enabled defaults && run_step "System defaults" set_defaults
+step_enabled dock     && run_step "Dock contents" set_dock
+step_enabled hostname && run_step "Hostname" set_hostname
+step_enabled hosts    && run_step "Hosts blocklist" write_hosts
+step_enabled borders  && run_step "Patched JankyBorders (Homebrew borders still works if this fails)" \
+                           with_timeout 900 "Borders build" "${SCRIPT_DIR}/libexec/install-borders"
+step_enabled fastmail && run_step "Fastmail theming (Fastmail itself is untouched if this fails)" \
+                           with_timeout 300 "Fastmail theming" "${SCRIPT_DIR}/libexec/install-fastmail"
+step_enabled theme    && run_step "Theme: ${THEME}" set_theme
 
 # Apply: restart the affected UI services. Key-repeat/appearance still want a logout.
 killall Finder Dock SystemUIServer 2>/dev/null || true
 
+echo; info "Summary:"
+printf '  %s\n' "${STEP_RESULTS[@]+"${STEP_RESULTS[@]}"}"
+if [[ -s "$NOTES" ]]; then
+  FAILED=1
+  warn "Didn't install (re-run \`shiny setup\` to retry just these):"
+  sed 's/^/  /' "$NOTES"
+fi
+
 cat <<EOF
 
-${BOLD}Done.${RESET}
+${BOLD}Done.${RESET}  Full log: ${LOG}
 
   • Log out and back in for keyboard repeat + accent colour to fully apply.
   • ${BOLD}Don't forget to log in to Tailscale${RESET} — run:  tailscale up
   • Sanity check what didn't install:  brew bundle check --file="$BREWFILE"
 
 EOF
+exit "$FAILED"

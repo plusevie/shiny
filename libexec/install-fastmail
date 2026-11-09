@@ -17,7 +17,7 @@ LABEL="shiny.fastmail"
 PLIST="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 CSS="${HOME}/Library/Application Support/shiny/fastmail.css"
 
-fastmail_running() { [[ "$(osascript -e 'application "Fastmail" is running' 2>/dev/null)" == true ]]; }
+fastmail_running() { open -Ra Fastmail 2>/dev/null && [[ "$(osascript -e 'application "Fastmail" is running' 2>/dev/null)" == true ]]; }
 # Fastmail quits when the agent it's piped to stops; bring it back after.
 reopen=0; fastmail_running && reopen=1
 

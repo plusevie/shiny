@@ -4,6 +4,7 @@
 
 - AeroSpace tiling (Option key) replaces Rectangle; the bar shows AeroSpace workspaces
 - glass: per-theme wash over macOS vibrancy (Beeper, Fastmail), measured on black/grey/white
+- setup failsafes: each step runs on its own (summary at the end, log in `~/Library/Logs/shiny`), Brewfile installs one entry at a time with timeouts, apps that aren't installed no longer stall the theme for 2 min
 
 ## v1.0.0 — 2026-11-09
 

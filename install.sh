@@ -27,16 +27,27 @@ if ! xcode-select -p >/dev/null 2>&1; then
   die "Install the Command Line Tools from the dialog that just opened, then run this again."
 fi
 
+# A stalled transfer gives up instead of hanging forever.
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=60
+
+# A clone interrupted by an earlier run leaves a checkout git can't use.
+if [[ -e "$SHINY_HOME" ]] && ! git -C "$SHINY_HOME" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+  info "Moving aside an incomplete install at ${SHINY_HOME}…"
+  mv "$SHINY_HOME" "${SHINY_HOME}.broken-$(date +%s)"
+fi
+
 if [[ -d "${SHINY_HOME}/.git" ]]; then
   info "Updating ${SHINY_HOME}…"
-  git -C "$SHINY_HOME" pull -q --ff-only
+  git -C "$SHINY_HOME" pull -q --ff-only \
+    || die "Couldn't update ${SHINY_HOME} — local changes? (git -C \"${SHINY_HOME}\" status)"
 else
   info "Installing shiny to ${SHINY_HOME}…"
   mkdir -p "$(dirname "$SHINY_HOME")"
-  git clone -q --depth 1 -b "$BRANCH" "$REPO" "$SHINY_HOME"
+  git clone -q --depth 1 -b "$BRANCH" "$REPO" "$SHINY_HOME" \
+    || { rm -rf "$SHINY_HOME"; die "Couldn't clone ${REPO} — check your connection and run this again."; }
 fi
 
-"${SHINY_HOME}/bin/shiny" install-cli
+"${SHINY_HOME}/bin/shiny" install-cli || die "Couldn't put \`shiny\` on your PATH (see above)."
 
 cat <<MSG
 

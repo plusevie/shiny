@@ -500,8 +500,19 @@ curtain_up
 curtain_say "Recolouring macOS…"
 run_target macos
 curtain_say "Theming apps…"
-JOBS=()
-for t in "${TARGETS[@]}"; do [[ "$t" == macos ]] || { run_target "$t" & JOBS+=($!); }; done
+JOBS=() JOB_NAMES=()
+for t in "${TARGETS[@]}"; do [[ "$t" == macos ]] || { run_target "$t" & JOBS+=($!); JOB_NAMES+=("$t"); }; done
+# One stuck target (an AppleScript waiting on a permission dialog, an app that
+# won't quit) gets stopped instead of holding up the rest of the theme.
+TARGET_TIMEOUT="${SHINY_TARGET_TIMEOUT:-90}"
+deadline=$(( SECONDS + TARGET_TIMEOUT ))
+for i in "${!JOBS[@]}"; do
+  while kill -0 "${JOBS[$i]}" 2>/dev/null && (( SECONDS < deadline )); do sleep 0.2; done
+  if kill -0 "${JOBS[$i]}" 2>/dev/null; then
+    pkill -TERM -P "${JOBS[$i]}" 2>/dev/null || true; kill -TERM "${JOBS[$i]}" 2>/dev/null || true
+    warn "${JOB_NAMES[$i]}: still going after ${TARGET_TIMEOUT}s — stopped it (SHINY_TARGET_TIMEOUT to change)."
+  fi
+done
 wait "${JOBS[@]}" 2>/dev/null || true
 mkdir -p "$STATE_DIR"; printf '%s\n' "$THEME" > "${STATE_DIR}/current"
 # Alfred only re-draws app icons (new tint) after a restart. Do it last and
