@@ -9,6 +9,10 @@
 - unattended first run: AeroSpace and Alfred start themselves, Helium gets *Continue where you left off* before its first launch, the installer waits for the Command Line Tools instead of exiting, setup trusts every tap the Brewfile names and no longer reinstalls tap casks each run
 - glass: per-theme wash over macOS vibrancy (Beeper, Fastmail), measured on black/grey/white
 - setup failsafes: each step runs on its own (summary at the end, log in `~/Library/Logs/shiny`), Brewfile installs one entry at a time with timeouts, apps that aren't installed no longer stall the theme for 2 min
+- setup asks everything up front (Command Line Tools dialog, hostname, App Store sign-in, password), then runs on its own; the end lists approvals macOS still needs (AeroSpace Accessibility, Alfred Powerpack) and opens the settings pane
+- AppleScript calls to apps give up after 5s, so a first-run "wants to control" prompt can't stall a theme or setup
+- `.shiny` theme files: `shiny theme export` / `import` (and `set file.shiny`); imports are checked so a package can only carry settings, colours and a wallpaper
+- TUI previews are all the same size, shaped like the main display and cropped like the desktop
 
 ## v1.0.0 — 2026-11-09
 

@@ -80,12 +80,7 @@ echo; banner; echo
 [[ "$(uname -s)" == "Darwin" ]] || die "macOS only."
 [[ -f "$BREWFILE" ]] || die "No Brewfile found next to this script at: $BREWFILE"
 
-# Grab sudo once, keep it warm for the whole run.
-info "This script needs sudo for Homebrew, hostname, and a few system settings."
-sudo -v
-while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
-SUDO_KEEPALIVE_PID=$!
-trap 'kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true; rm -f "$NOTES"' EXIT
+trap 'kill "${SUDO_KEEPALIVE_PID:-}" 2>/dev/null || true; rm -f "$NOTES"' EXIT
 
 note() { printf '%s\n' "$*" >> "$NOTES"; }   # note <line> — listed in the summary
 
@@ -113,8 +108,8 @@ install_clt() {
     info "Xcode CLT already present."
     return
   fi
-  info "Installing Xcode Command Line Tools (a GUI dialog will appear)…"
-  xcode-select --install || true
+  info "Installing Xcode Command Line Tools…"
+  xcode-select --install 2>/dev/null || true   # usually already opened by the preflight
   info "Waiting for CLT install to finish — complete the dialog if prompted…"
   local waited=0
   until xcode-select -p >/dev/null 2>&1; do
@@ -147,15 +142,6 @@ install_brew() {
 }
 
 run_bundle() {
-  # MAS apps in the Brewfile need an active App Store session first — mas can't
-  # sign in (Apple removed CLI sign-in), so gate on it here.
-  if ((YES)); then
-    info "Skipping the App Store sign-in prompt (--yes); MAS apps install if you're already signed in."
-  else
-    info "Open the App Store app and sign in with your Apple ID (skip if you already are)."
-    read -r -p "Press Enter once you're signed in (or to skip MAS apps)… " _
-  fi
-
   command -v brew >/dev/null 2>&1 || die "Homebrew isn't installed (run the Homebrew step)."
   # Newer Homebrew refuses third-party taps until trusted: every tap the
   # Brewfile names (user/tap/name entries).
@@ -315,8 +301,7 @@ set_dock() {
 set_hostname() {
   local name current
   current="$(scutil --get ComputerName 2>/dev/null || true)"
-  if ((YES)); then info "Keeping hostname '${current}' (--yes)."; return; fi
-  read -r -p "Hostname for this machine [${current}]: " name
+  name="${NEW_HOSTNAME:-}"   # asked in the preflight
   [[ -z "$name" || "$name" == "$current" ]] && { info "Keeping hostname '${current}'."; return; }
 
   # LocalHostname (Bonjour/.local) can't contain spaces or odd chars.
@@ -434,7 +419,40 @@ run_step() {
   fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Preflight — everything that needs you happens here, then the rest runs on its
+# own. (macOS still shows its own permission dialogs as apps first start, at the
+# end: Accessibility for AeroSpace, "Terminal wants to control …".)
+# ─────────────────────────────────────────────────────────────────────────────
+preflight() {
+  # The Command Line Tools dialog first: it downloads while you answer the rest.
+  if step_enabled clt && ! xcode-select -p >/dev/null 2>&1; then
+    xcode-select --install 2>/dev/null || true
+    info "Click Install in the Command Line Tools dialog (it carries on in the background)."
+  fi
+  if ! ((YES)) && [[ -t 0 ]]; then
+    if step_enabled hostname; then
+      local current; current="$(scutil --get ComputerName 2>/dev/null || true)"
+      read -r -p "Hostname for this machine [${current}]: " NEW_HOSTNAME
+    fi
+    # mas can't sign in (Apple removed CLI sign-in) or tell whether you are.
+    if step_enabled brew && grep -qE '^[[:space:]]*mas ' "$BREWFILE"; then
+      open -a "App Store" 2>/dev/null || true
+      info "Sign in to the App Store (it just opened) if you aren't already — App Store apps need it."
+      read -r -p "Press Enter when you're signed in (or to skip App Store apps)… " _
+    fi
+  fi
+  # Your password once; kept warm for the whole run.
+  info "Your password, for Homebrew, the hostname, the hosts file and a few system settings:"
+  sudo -v
+  while true; do sudo -n true; sleep 60; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null &
+  SUDO_KEEPALIVE_PID=$!
+  echo; info "${B}That's everything — the rest runs on its own.${N}"
+}
+
 choose_recipe
+NEW_HOSTNAME=""
+preflight
 
 step_enabled clt      && run_step "Xcode Command Line Tools" install_clt
 step_enabled brew     && { run_step "Homebrew" install_brew; load_brew_env || true; run_step "Brewfile apps" run_bundle; }
@@ -459,9 +477,23 @@ if [[ -s "$NOTES" ]]; then
   sed 's/^/  /' "$NOTES"
 fi
 
+# Approvals macOS only asks for once an app has started: open the pane for them.
+TODO=()
+if [[ -d /Applications/AeroSpace.app ]] && ! timeout 5 aerospace list-workspaces --focused >/dev/null 2>&1; then
+  TODO+=("Allow ${BOLD}AeroSpace${RESET} in Privacy & Security → Accessibility (just opened) so it can tile.")
+  open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility" 2>/dev/null || true
+fi
+if [[ -d "/Applications/Alfred 5.app" ]] && ! compgen -G "${HOME}/Library/Application Support/Alfred/powerpack.*.dat" >/dev/null; then
+  TODO+=("Alfred: enter your Powerpack licence (Alfred → Powerpack) — the \`theme\` workflow needs it.")
+fi
+if [[ -s "$NOTES" ]] && grep -q '^mas ' "$NOTES"; then
+  TODO+=("App Store apps were skipped: sign in to the App Store, then run \`shiny setup\` again.")
+fi
+
 cat <<EOF
 
 ${BOLD}Done.${RESET}  Full log: ${LOG}
+$( ((${#TODO[@]})) && printf '\n  • %s' "${TODO[@]}" )
 
   • Log out and back in for keyboard repeat + accent colour to fully apply.
   • ${BOLD}Don't forget to log in to Tailscale${RESET} — run:  tailscale up

@@ -24,6 +24,7 @@ export SHINY_HOME
 source "${SHINY_HOME}/libexec/lib.sh"
 APPLY="${SHINY_HOME}/libexec/shiny-apply"
 PALETTE="${SHINY_HOME}/libexec/palette.py"
+PACKAGE="${SHINY_HOME}/libexec/package.py"
 
 help_top()   { awk 'NR>2 && /^#/ {sub(/^# ?/, ""); print; next} NR>2 {exit}' "$SELF"; }
 help_theme() { cat <<EOF
@@ -33,7 +34,13 @@ ${B}shiny theme${N} — themes change colours + wallpaper; blur, layout and tint
                      generate a theme from any image (picks the closest existing
                      colour scheme, then accents that match the image;
                      --scheme image builds every colour from the image instead)
-  set [NAME]         apply a theme (no name: pick from a list)
+  set [NAME|FILE]    apply a theme (no name: pick from a list; a .shiny file
+                     is imported first)
+  export [NAME] [-o FILE]
+                     pack a theme into one .shiny file (palette, overrides,
+                     wallpaper) to share or carry to another Mac
+  import FILE [-n NAME] [--set]
+                     add a .shiny theme to your themes
   list               list themes (* = current)
   show [NAME]        print a theme's colours
   edit [NAME]        open a theme's palette in \$EDITOR (stock themes are copied
@@ -178,13 +185,58 @@ theme_check() { # theme_check [name|all] — lint palettes; exit 1 if any has er
   return "$bad"
 }
 
+theme_export() {
+  local name="" out=""
+  while (($#)); do
+    case "$1" in
+      -o|--out) out="$2"; shift 2 ;;
+      -*) die "theme export: unknown option $1" ;;
+      *) name="$1"; shift ;;
+    esac
+  done
+  [[ -n "$name" ]] || name="$(pick_theme "Export")"
+  local dir; dir="$(theme_dir "$name")" || die "No such theme: $name"
+  [[ -n "$out" ]] || out="${PWD}/${name}.shiny"
+  [[ "$out" == *.shiny ]] || out="${out}.shiny"
+  /usr/bin/python3 "$PACKAGE" export "$dir" "$name" "$out" || exit 1
+  info "Packed ${B}${name}${N} → ${out}"
+}
+
+theme_import() { # theme_import FILE [-n NAME] [--set]
+  local file="" name="" set=0 args=() rc=0
+  while (($#)); do
+    case "$1" in
+      -n|--name) name="$2"; shift 2 ;;
+      --set) set=1; shift ;;
+      -*) die "theme import: unknown option $1" ;;
+      *) file="$1"; shift ;;
+    esac
+  done
+  [[ -f "$file" ]] || die "usage: shiny theme import FILE.shiny [-n name] [--set]"
+  [[ -n "$name" ]] && args=(--name "$name")
+  IMPORTED="$(/usr/bin/python3 "$PACKAGE" import "$file" "$USER_THEMES" ${args[@]+"${args[@]}"})" || rc=$?
+  if ((rc == 3)); then   # a theme of yours already has that name
+    [[ -t 0 ]] || die "Theme '${IMPORTED}' already exists (rename with -n)."
+    read -r -p "Theme '${IMPORTED}' exists — replace it? [y/N] " a; [[ "$a" == [yY]* ]] || exit 1
+    IMPORTED="$(/usr/bin/python3 "$PACKAGE" import "$file" "$USER_THEMES" --force ${args[@]+"${args[@]}"})" || exit 1
+  elif ((rc)); then exit 1; fi
+  info "Imported ${B}${IMPORTED}${N} into ${USER_THEMES}"
+  /usr/bin/python3 "$PALETTE" --check "${USER_THEMES}/${IMPORTED}/palette.sh" || warn "It has errors — fix them before applying: shiny theme edit ${IMPORTED}"
+  ( "$APPLY" --warm "$IMPORTED" >/dev/null 2>&1 & )
+  if ((set)); then "$APPLY" "$IMPORTED"; fi
+}
+
 theme_cmd() {
   local sub="${1:-help}"; shift || true
   case "$sub" in
     new)      theme_new "$@" ;;
     set|use|apply)
-              local name="${1:-}"; [[ -n "$name" ]] || name="$(pick_theme "Theme")"
+              local name="${1:-}"
+              if [[ "$name" == *.shiny && -f "$name" ]]; then theme_import "$name" --set; return; fi
+              [[ -n "$name" ]] || name="$(pick_theme "Theme")"
               "$APPLY" "$name" ;;
+    export|pack) theme_export "$@" ;;
+    import|add)  theme_import "$@" ;;
     list|ls)  "$APPLY" --list ;;
     show)     theme_show "${1:-}" ;;
     edit)     theme_edit "${1:-}" ;;

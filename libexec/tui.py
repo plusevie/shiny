@@ -222,12 +222,35 @@ def resample(img, tw, th):
         out.append(line)
     return out
 
-def fit(img, maxw, maxh):
-    """Cell size (cols, rows) for an image inside maxw×maxh cells (half-blocks ≈ square pixels)."""
-    w, h, _ = img
-    tw, th = maxw, max(2, round(maxw * h / w))
+def screen_aspect():
+    """Width/height of the main display, so previews are shaped like the desktop they'll be on."""
+    try:
+        r = subprocess.run(["osascript", "-l", "JavaScript", "-e",
+                            'ObjC.import("AppKit"); var f = $.NSScreen.mainScreen.frame; f.size.width / f.size.height'],
+                           capture_output=True, text=True, timeout=3)
+        a = float(r.stdout)
+        if 0.3 < a < 5:
+            return a
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+    return 16 / 10
+
+SCREEN_ASPECT = screen_aspect()
+
+def cover(img, aspect):
+    """Centre-crop an image to aspect (w/h) — what macOS's "Fill Screen" shows."""
+    w, h, rows = img
+    if w / h > aspect:
+        cw = max(1, round(h * aspect)); x0 = (w - cw) // 2
+        return cw, h, [r[x0:x0 + cw] for r in rows]
+    ch = max(1, round(w / aspect)); y0 = (h - ch) // 2
+    return w, ch, rows[y0:y0 + ch]
+
+def fit(aspect, maxw, maxh):
+    """Cell size (cols, rows) of the largest aspect-shaped box in maxw×maxh cells (half-blocks ≈ square pixels)."""
+    tw, th = maxw, max(2, round(maxw / aspect))
     if th > maxh * 2:
-        th = maxh * 2; tw = max(1, round(th * w / h))
+        th = maxh * 2; tw = max(1, round(th * aspect))
     return tw, (th + 1) // 2
 
 
@@ -764,11 +787,12 @@ class App:
         if res[0] != "ok":
             c.put(x, y + h // 2, "(no preview: %s)" % res[1].splitlines()[0][:w - 14], u["COMMENT"], maxw=w)
             return
-        tw, th = fit(res[1], w, h)
+        # Every preview is the same size: the screen's shape, filled like the desktop.
+        tw, th = fit(SCREEN_ASPECT, w, h)
         key = ("px", path, tw, th)
         px = self.jobs.results.get(key)
         if px is None:
-            px = self.jobs.results[key] = resample(res[1], tw, th * 2)
+            px = self.jobs.results[key] = resample(cover(res[1], SCREEN_ASPECT), tw, th * 2)
         for ry in range(th):
             top, bot = px[ry * 2], px[ry * 2 + 1] if ry * 2 + 1 < len(px) else px[ry * 2]
             for rx in range(tw):

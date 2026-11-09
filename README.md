@@ -12,15 +12,15 @@ provided as-is with no warranty. project contains ai code so no copyright whatso
 curl -fsSL https://raw.githubusercontent.com/plusevie/shiny/main/install.sh | bash
 ```
 
-clones shiny to `~/.local/share/shiny` and puts a `shiny` command on your PATH. run it again to update (or `shiny update`).
+clones shiny to `~/.local/share/shiny` (latest commit only, stock themes and wallpapers included, ~20 MB) and puts a `shiny` command on your PATH. run it again to update (or `shiny update`).
 
-a new mac, start to finish (asks for your password once; then only macOS's own prompts: the Command Line Tools dialog, and Accessibility for AeroSpace):
+a new mac, start to finish. everything that needs you comes first (Command Line Tools dialog, hostname, App Store sign-in, your password); then it runs on its own, and at the end lists the approvals macOS only asks for once apps have started (Accessibility for AeroSpace, the Alfred Powerpack) and opens the right settings pane. `--yes` skips the questions too:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/plusevie/shiny/main/install.sh | bash && shiny setup --yes
 ```
 
-App Store apps install only if you're already signed in to the App Store (`mas` can't sign in for you); re-run `shiny setup` after signing in to get them.
+App Store apps need you signed in to the App Store (`mas` can't sign in or check): plain `shiny setup` opens it and waits for you; with `--yes`, they're skipped unless you already are.
 
 ## use
 
@@ -30,7 +30,9 @@ shiny setup                 # apps (Brewfile), defaults (dark mode, Dock on the 
 shiny setup --yes           # same, no prompts
 
 shiny theme list            # * = current
-shiny theme set [name]      # apply (no name: pick from a list)
+shiny theme set [name]      # apply (no name: pick from a list; a .shiny file is imported first)
+shiny theme export [name] [-o file.shiny]   # one file: palette, overrides, wallpaper
+shiny theme import file.shiny [-n name] [--set]
 shiny theme new -i ~/Pictures/wall.jpg [-n name] [--set]
 shiny theme show [name]     # print a theme's colours
 shiny theme edit [name]     # open its palette in $EDITOR, re-applies if current

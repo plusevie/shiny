@@ -10,6 +10,12 @@ a theme is a folder with two files:
 
 that's all. blur, opacity, layout, fonts and icon-tint strength are shared by every theme (`templates/style.sh`), so a theme only ever chooses colours. you never touch the app configs: `templates/` turns the ten roles into ghostty, borders, alfred, helium, beeper, cider, fastmail, sketchybar and macos settings.
 
+## sharing: .shiny files
+
+`shiny theme export <name>` packs a theme into one `<name>.shiny` (a zip: `shiny.json`, `palette.sh` with any per-theme overrides, the wallpaper, and `ghostty-theme` for themes built from their image). `shiny theme import file.shiny` (or `shiny theme set file.shiny`) adds it to your themes on any Mac.
+
+`palette.sh` is loaded straight into shiny's shell, so an import only takes plain `KEY="value"` lines for the colour roles, the theme settings below and `templates/style.sh` keys, with literal values (no `$`, backticks or other variables); `ghostty-theme` may only hold colours; anything else in the zip is refused. a `.shiny` can change how things look, never run anything.
+
 ## the process
 
 1. **pick a wallpaper.** dark images work best (the templates are tuned for dark themes). 5k+ images get scaled down to 5120px.

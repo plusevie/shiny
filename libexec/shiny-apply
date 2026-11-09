@@ -68,6 +68,14 @@ quit_app() { # quit_app <app> [secs] — ask an app to quit; never blocks on its
   return 1
 }
 
+tell_app() { # tell_app <osascript -e …> — gives up after 5s: a first-run "wants to control"
+  # prompt stays up for later, but can't stall the theme (or an unattended setup).
+  osascript "$@" >/dev/null 2>&1 &
+  local pid=$! i
+  for ((i = 0; i < 25; i++)); do kill -0 "$pid" 2>/dev/null || { wait "$pid"; return; }; sleep 0.2; done
+  kill "$pid" 2>/dev/null; return 1
+}
+
 relaunch() { # relaunch <app name> — only if it's running; gives up if it won't quit
   app_running "$1" || return 0
   quit_app "$1" || { warn "$1 didn't quit (waiting on a dialog?) — restart it yourself to see the theme."; return 1; }
@@ -198,9 +206,9 @@ apply_ghostty() {
   # Live-reload open windows via Ghostty's AppleScript (no-op with no windows;
   # new windows read the file anyway). First run asks for Automation permission.
   if app_running Ghostty; then
-    osascript -e 'tell application "Ghostty"' \
-              -e 'if (count terminals) > 0 then perform action "reload_config" on first terminal' \
-              -e 'end tell' >/dev/null 2>&1 || true
+    tell_app -e 'tell application "Ghostty"' \
+             -e 'if (count terminals) > 0 then perform action "reload_config" on first terminal' \
+             -e 'end tell' || true
   fi
   info "Ghostty: updated."
 }
@@ -258,7 +266,7 @@ install_alfred_workflow() { # unpack the `theme` workflow into Alfred's prefs; u
   fi
   mkdir -p "$dir" && unzip -qo "$wf" -d "$dir" || { warn "Alfred: couldn't install the theme workflow."; return 0; }
   if app_running "Alfred 5" || app_running Alfred; then
-    osascript -e 'tell application id "com.runningwithcrayons.Alfred" to reload workflow "shiny.theme-switcher"' >/dev/null 2>&1 || true
+    tell_app -e 'tell application id "com.runningwithcrayons.Alfred" to reload workflow "shiny.theme-switcher"' || true
   fi
   info "Alfred: installed the theme workflow (type \`theme\`; needs the Powerpack)."
 }
@@ -288,7 +296,7 @@ apply_alfred() {
   # Alfred doesn't always notice the theme file changed; its AppleScript
   # "set theme" (by the name inside theme.json) makes it reload right away.
   if app_running "Alfred 5" || app_running Alfred; then
-    osascript -e "tell application id \"com.runningwithcrayons.Alfred\" to set theme \"${THEME}\"" >/dev/null 2>&1 || true
+    tell_app -e "tell application id \"com.runningwithcrayons.Alfred\" to set theme \"${THEME}\"" || true
   fi
   ((found)) && info "Alfred: theme '${THEME}' selected." \
             || warn "Alfred: theme written, but select '${THEME}' in Appearance once."
@@ -488,8 +496,8 @@ apply_wallpaper() {
   if command -v wallpaper >/dev/null 2>&1; then
     wallpaper set "$dest" || { warn "Couldn't set wallpaper."; return 0; }
   else
-    osascript -e "tell application \"System Events\" to tell every desktop to set picture to \"$dest\"" \
-      >/dev/null || { warn "Couldn't set wallpaper."; return 0; }
+    tell_app -e "tell application \"System Events\" to tell every desktop to set picture to \"$dest\"" \
+      || { warn "Couldn't set wallpaper."; return 0; }
   fi
   # macOS only set it on the current desktop. Once it has written Index.plist
   # (was a fixed 1s sleep), copy it to every desktop.
