@@ -31,11 +31,11 @@ ALFRED_THEME_UID="theme.custom.shiny"
 ICON_TINT_CHANGED=0
 
 # Everything a theme touches. Each has an apply_<target>; macos runs first.
-TARGETS=(macos ghostty borders alfred fastmail sketchybar wallpaper helium beeper cider)
+TARGETS=(macos ghostty borders alfred fastmail sketchybar aerospace wallpaper helium beeper cider)
 # Templates rendered by --render (template:output name).
 RENDER_SET=(ghostty.conf:ghostty.conf bordersrc:bordersrc alfred.json:alfred.json helium.json:helium.json
             beeper.css:beeper.css cider.css:cider.css sketchybar/colors.sh:sketchybar-colors.sh
-            fastmail.css:fastmail.css)
+            fastmail.css:fastmail.css aerospace.toml:aerospace.toml)
 
 list_themes() {
   local current n d kind; current="$(current_theme)"
@@ -113,6 +113,7 @@ load_theme() {
   : "${ACCENT_PRESET:=4}" "${WALLPAPER:=wallpaper.jpg}" "${ALFRED_BLUR:=$BLUR}"
   : "${WINDOW_GAP:=10}" "${BAR_HEIGHT:=34}"
   BAR_Y_OFFSET="$(awk -v g="$WINDOW_GAP" 'BEGIN { print g / 2 }')"   # SketchyBar's y_offset counts double
+  BAR_CLEARANCE=$(( WINDOW_GAP + BAR_HEIGHT + WINDOW_GAP ))   # window bottoms: a gap above the bar
   ALPHA_HEX="$(alpha_hex "$OPACITY")"
   ALFRED_ALPHA_HEX="$(alpha_hex "${ALFRED_OPACITY:-$OPACITY}")"
   CIDER_ALPHA_HEX="$(alpha_hex "${CIDER_OPACITY:-$OPACITY}")"
@@ -136,7 +137,7 @@ load_theme() {
   RENDER_SED="$(mktemp "${TMPDIR:-/tmp}/shiny-render.XXXXXX")"
   local var v
   for var in THEME GHOSTTY_THEME VERSION ACCENT_HUE OPACITY BLUR ALFRED_BLUR ALPHA_HEX ALFRED_ALPHA_HEX \
-             WINDOW_GAP BAR_HEIGHT BAR_Y_OFFSET \
+             WINDOW_GAP BAR_HEIGHT BAR_Y_OFFSET BAR_CLEARANCE \
              MATERIAL_WASH MATERIAL_ALPHA_HEX MATERIAL_ALPHA2_HEX CIDER_ALPHA_HEX "${COLOR_ROLES[@]}" \
              $(printf '%s_RGB ' "${COLOR_ROLES[@]}") $(printf '%s_ARGB ' "${COLOR_ROLES[@]}"); do
     v="${!var}"; v="${v//\\/\\\\}"; v="${v//|/\\|}"; v="${v//&/\\&}"
@@ -300,6 +301,19 @@ apply_sketchybar() {
     sketchybar --reload && info "SketchyBar: reloaded."
   else
     info "SketchyBar: updated (not running; applies when it starts)."
+  fi
+}
+
+apply_aerospace() {
+  [[ -d /Applications/AeroSpace.app ]] || return 0
+  local dest="${HOME}/.config/aerospace/aerospace.toml"
+  backup_unmanaged "$dest" AeroSpace
+  render aerospace.toml "$dest"
+  # It reloads the file itself (auto-reload-config); this also covers older configs.
+  if pgrep -xq AeroSpace; then
+    aerospace reload-config >/dev/null 2>&1 && info "AeroSpace: reloaded." || warn "AeroSpace: couldn't reload."
+  else
+    info "AeroSpace: updated (not running; applies when it starts)."
   fi
 }
 

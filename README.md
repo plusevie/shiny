@@ -67,6 +67,10 @@ stock themes live in `themes/`, yours in `~/.config/shiny/themes/` (yours win if
 - **loading screen:** while a theme applies, the screen dips to black so the dock/finder/widget restarts and app relaunches happen out of sight. click to dismiss early; `SHINY_CURTAIN=0 shiny theme <name>` to skip it.
 - **blur:** ghostty + alfred use macOS's window blur (maxes out around 90); beeper uses macOS vibrancy. measured against a checkerboard so they match as closely as they can.
 
+## windows
+
+[AeroSpace](https://github.com/nikitabobko/AeroSpace) tiles windows (no SIP changes needed). Option is the key: `opt+h/j/k/l` focus, `opt+shift+h/j/k/l` move, `opt+1…9` switch workspace, `opt+shift+1…9` send a window there, `opt+f` fullscreen, `opt+shift+space` float/tile, `opt+/` and `opt+,` change layout. The bar shows workspaces that have windows. Gaps match the bar (`WINDOW_GAP` in `templates/style.sh`); the config is `templates/aerospace.toml`.
+
 ## notes
 
 - `shiny setup` installs a patched jankyborders (1.9.0 + the macOS 27 mission control fix, upstream issues #147/#209) as a launch agent. undo: `~/.local/share/shiny/libexec/install-borders --uninstall`.

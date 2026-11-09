@@ -25,11 +25,9 @@ CIDER_OPACITY=0.20     # Cider: same vibrancy, wash tuned on a checkerboard to G
 # SURFACE (a step up from BG) with more opacity to land on the same brightness.
 ICON_TINT_ALPHA=0.15   # macOS icon tint strength (it renders tints dark + saturated)
 
-# Spacing (points), shared by Rectangle (libexec/rectangle-config) and the bar:
+# Spacing (points), shared by AeroSpace (templates/aerospace.toml) and the bar:
 # windows sit WINDOW_GAP from each other and the screen edges, and the bar sits
 # WINDOW_GAP from the sides, the bottom, and the windows above it, so their
-# edges line up. Measured on macOS 27: SketchyBar's y_offset counts double, and
-# Rectangle adds its gap on top of screenEdgeGapBottom. Re-run
-# libexec/rectangle-config after changing these.
+# edges line up. Measured on macOS 27: SketchyBar's y_offset counts double.
 WINDOW_GAP=10
 BAR_HEIGHT=34

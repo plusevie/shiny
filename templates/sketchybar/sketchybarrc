@@ -15,15 +15,18 @@ sketchybar --default \
   padding_left=4 padding_right=4 \
   icon.padding_left=4 icon.padding_right=4 label.padding_left=4 label.padding_right=4
 
-# ── Spaces (stock macOS desktops) ─────────────────────────────────────────────
-# Items for desktops that don't exist aren't drawn. Click = Ctrl+N
-# (System Settings → Keyboard Shortcuts → Mission Control → Switch to Desktop N).
+# ── Workspaces (AeroSpace) ───────────────────────────────────────────────────
+# A pill per workspace with windows, plus the focused one. Click to switch.
+# AeroSpace triggers aerospace_workspace_change (templates/aerospace.toml).
+sketchybar --add event aerospace_workspace_change
 for sid in 1 2 3 4 5 6 7 8 9; do
-  sketchybar --add space space.$sid left --set space.$sid space=$sid \
+  sketchybar --add item space.$sid left \
+    --subscribe space.$sid aerospace_workspace_change front_app_switched system_woke \
+    --set space.$sid drawing=off \
     icon=$sid icon.padding_left=9 icon.padding_right=9 icon.color="$FG_DIM" \
     label.drawing=off padding_left=2 padding_right=2 \
     background.color="$PILL" background.corner_radius=8 background.height=22 \
-    script="$PLUGIN_DIR/space.sh" click_script="$PLUGIN_DIR/goto_space.sh $sid"
+    script="$PLUGIN_DIR/aerospace.sh $sid" click_script="aerospace workspace $sid"
 done
 
 sketchybar --add item front_app left --set front_app icon.drawing=off \

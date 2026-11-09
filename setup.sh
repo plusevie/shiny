@@ -163,8 +163,10 @@ p = json.load(open(sys.argv[1])); p.setdefault("session", {})["restore_on_startu
 json.dump(p, open(sys.argv[1], "w"), separators=(",", ":"))' "$hp" || warn "Couldn't set Helium's startup option."
   fi
 
-  # Rectangle: Magnet-style shortcuts, gaps, room for the bottom bar.
-  [[ -d /Applications/Rectangle.app ]] && "${SCRIPT_DIR}/libexec/rectangle-config" || true
+  # AeroSpace tiles windows (config is rendered by the theme step). Group
+  # windows by app in Mission Control: AeroSpace hides windows off-screen
+  # and ungrouped they show up tiny.
+  defaults write com.apple.dock expose-group-apps -bool true
 
   # Finder
   defaults write com.apple.finder AppleShowAllFiles -bool true

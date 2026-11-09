@@ -21,7 +21,7 @@ cask "claude"
 cask "claude-code"              # CC CLI - no auto-update
 cask "figma"
 cask "thaw"
-cask "rectangle"               # window snapping (Magnet layout, leaves room for SketchyBar)
+cask "aerospace"               # i3-style tiling window manager (Option key; config from shiny)
 cask "notion"
 cask "helium-browser"
 cask "ghostty"

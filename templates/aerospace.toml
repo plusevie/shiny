@@ -1,0 +1,99 @@
+# managed by shiny-theme ({{THEME}}) — edit templates/aerospace.toml in shiny, not this file.
+# AeroSpace: i3-style tiling. Option is the key: opt+h/j/k/l focus, opt+shift+h/j/k/l
+# move, opt+1…9 workspace, opt+shift+1…9 send the window there.
+# Docs: https://nikitabobko.github.io/AeroSpace/guide
+config-version = 2
+
+start-at-login = true
+auto-reload-config = true
+after-startup-command = []
+
+# The bar shows workspaces: tell it when they change.
+exec-on-workspace-change = ['/bin/bash', '-c',
+  'sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE']
+
+enable-normalization-flatten-containers = true
+enable-normalization-opposite-orientation-for-nested-containers = true
+accordion-padding = 30
+default-root-container-layout = 'tiles'
+default-root-container-orientation = 'auto'
+on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
+automatically-unhide-macos-hidden-apps = false
+persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+key-mapping.preset = 'qwerty'
+
+# Same spacing as the bar (templates/style.sh WINDOW_GAP): windows sit WINDOW_GAP
+# apart and from the screen edges, and end WINDOW_GAP above the bar.
+gaps.inner.horizontal = {{WINDOW_GAP}}
+gaps.inner.vertical =   {{WINDOW_GAP}}
+gaps.outer.left =       {{WINDOW_GAP}}
+gaps.outer.right =      {{WINDOW_GAP}}
+gaps.outer.top =        {{WINDOW_GAP}}
+gaps.outer.bottom =     {{BAR_CLEARANCE}}
+
+[mode.main.binding]
+    alt-slash = 'layout tiles horizontal vertical'
+    alt-comma = 'layout accordion horizontal vertical'
+    alt-f = 'fullscreen'
+    alt-shift-space = 'layout floating tiling'
+
+    alt-h = 'focus left'
+    alt-j = 'focus down'
+    alt-k = 'focus up'
+    alt-l = 'focus right'
+    alt-shift-h = 'move left'
+    alt-shift-j = 'move down'
+    alt-shift-k = 'move up'
+    alt-shift-l = 'move right'
+
+    alt-minus = 'resize smart -50'
+    alt-equal = 'resize smart +50'
+    alt-shift-equal = 'balance-sizes'
+
+    alt-1 = 'workspace 1'
+    alt-2 = 'workspace 2'
+    alt-3 = 'workspace 3'
+    alt-4 = 'workspace 4'
+    alt-5 = 'workspace 5'
+    alt-6 = 'workspace 6'
+    alt-7 = 'workspace 7'
+    alt-8 = 'workspace 8'
+    alt-9 = 'workspace 9'
+    alt-shift-1 = 'move-node-to-workspace 1'
+    alt-shift-2 = 'move-node-to-workspace 2'
+    alt-shift-3 = 'move-node-to-workspace 3'
+    alt-shift-4 = 'move-node-to-workspace 4'
+    alt-shift-5 = 'move-node-to-workspace 5'
+    alt-shift-6 = 'move-node-to-workspace 6'
+    alt-shift-7 = 'move-node-to-workspace 7'
+    alt-shift-8 = 'move-node-to-workspace 8'
+    alt-shift-9 = 'move-node-to-workspace 9'
+
+    alt-tab = 'workspace-back-and-forth'
+    alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
+    alt-shift-semicolon = 'mode service'
+
+# opt+shift+; then a key, for the less common things.
+[mode.service.binding]
+    esc = ['reload-config', 'mode main']
+    r = ['flatten-workspace-tree', 'mode main']           # reset layout
+    f = ['layout floating tiling', 'mode main']           # float / tile this window
+    backspace = ['close-all-windows-but-current', 'mode main']
+    alt-shift-h = ['join-with left', 'mode main']
+    alt-shift-j = ['join-with down', 'mode main']
+    alt-shift-k = ['join-with up', 'mode main']
+    alt-shift-l = ['join-with right', 'mode main']
+
+# Small utility windows float instead of tiling.
+[[on-window-detected]]
+    if.app-id = 'com.apple.systempreferences'
+    run = 'layout floating'
+[[on-window-detected]]
+    if.app-id = 'com.apple.calculator'
+    run = 'layout floating'
+[[on-window-detected]]
+    if.app-id = 'com.apple.ActivityMonitor'
+    run = 'layout floating'
+[[on-window-detected]]
+    if.app-id = 'com.apple.archiveutility'
+    run = 'layout floating'

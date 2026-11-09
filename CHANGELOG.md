@@ -1,5 +1,10 @@
 # changelog
 
+## unreleased
+
+- AeroSpace tiling (Option key) replaces Rectangle; the bar shows AeroSpace workspaces
+- glass: per-theme wash over macOS vibrancy (Beeper, Fastmail), measured on black/grey/white
+
 ## v1.0.0 — 2026-11-09
 
 first tagged release. everything below is what shiny does as of now.
