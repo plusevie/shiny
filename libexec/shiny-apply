@@ -398,11 +398,14 @@ apply_macos() {
 }
 
 apply_wallpaper() {
-  local src="${THEME_DIR}/${WALLPAPER}" dest index i before
+  local src="${THEME_DIR}/${WALLPAPER}" dest index i before hash old
   [[ -f "$src" ]] || { warn "No wallpaper in ${THEME_DIR} — skipped."; return 0; }
-  # Copy out of the repo: macOS keeps a live reference to the path.
-  dest="${HOME}/Pictures/shiny-${THEME}.${WALLPAPER##*.}"
-  cmp -s "$src" "$dest" || cp -f "$src" "$dest"
+  # Copy out of the repo: macOS keeps a live reference to the path. The name
+  # carries a hash of the image, because macOS caches by path: a regenerated
+  # theme copied over the same name kept showing the old picture.
+  hash="$(shasum -a 1 "$src" | cut -c1-8)"
+  dest="${HOME}/Pictures/shiny-${THEME}-${hash}.${WALLPAPER##*.}"
+  [[ -f "$dest" ]] || cp -f "$src" "$dest"
   index="${HOME}/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
   before="$(stat -f %m "$index" 2>/dev/null || echo 0)"
   if command -v wallpaper >/dev/null 2>&1; then
@@ -417,6 +420,12 @@ apply_wallpaper() {
   sleep 0.2
   /usr/bin/python3 "${ROOT}/libexec/wallpaper-all.py" && info "Wallpaper: set on all desktops." \
     || warn "Wallpaper: set, but couldn't copy it to other desktops."
+  # Drop this theme's older copies (and the pre-hash shiny-<theme>.<ext>).
+  local h='[0-9a-f]'
+  for old in "${HOME}/Pictures/shiny-${THEME}".* "${HOME}/Pictures/shiny-${THEME}-"$h$h$h$h$h$h$h$h.*; do
+    [[ -f "$old" && "$old" != "$dest" ]] && rm -f "$old"
+  done
+  return 0
 }
 
 # ── timing ───────────────────────────────────────────────────────────────────
