@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+#
+# shiny — macOS setup + theming engine.
+#
+#   shiny                               open the TUI (theme picker, theme builder)
+#   shiny setup [--yes]                 install apps, defaults, Dock, theme (safe to re-run)
+#   shiny theme <command>               manage themes (see: shiny theme help)
+#   shiny update                        pull the latest shiny and stock themes
+#   shiny version
+#
+# https://github.com/plusevie/shiny
+
+set -euo pipefail
+
+# Resolve our install dir through the /usr/local/bin symlink.
+SELF="${BASH_SOURCE[0]}"
+while [[ -L "$SELF" ]]; do
+  t="$(readlink "$SELF")"; [[ "$t" == /* ]] && SELF="$t" || SELF="$(dirname "$SELF")/$t"
+done
+SHINY_HOME="$(cd "$(dirname "$SELF")/.." && pwd)"
+export SHINY_HOME
+
+# shellcheck source=../libexec/lib.sh
+source "${SHINY_HOME}/libexec/lib.sh"
+APPLY="${SHINY_HOME}/libexec/shiny-apply"
+PALETTE="${SHINY_HOME}/libexec/palette.py"
+
+help_top()   { awk 'NR>2 && /^#/ {sub(/^# ?/, ""); print; next} NR>2 {exit}' "$SELF"; }
+help_theme() { cat <<EOF
+${B}shiny theme${N} — themes change colours + wallpaper; blur, layout and tint strength are shared.
+
+  new -i IMAGE [-n NAME] [--scheme ID] [--accent HEX] [--accent2 HEX] [--set]
+                     generate a theme from any image (picks the closest existing
+                     colour scheme, then accents that match the image;
+                     --scheme image builds every colour from the image instead)
+  set [NAME]         apply a theme (no name: pick from a list)
+  list               list themes (* = current)
+  show [NAME]        print a theme's colours
+  edit [NAME]        open a theme's palette in \$EDITOR (stock themes are copied
+                     to your themes first), re-applies if it's the current one
+  remove [NAME]      delete one of your themes
+  current            print the current theme
+  reload [target]    re-apply the current theme (or just one: sketchybar, ghostty, helium…)
+  check [NAME|all]   lint a theme's palette (contrast, missing roles, wallpaper)
+  rank -i IMAGE      show which colour schemes fit an image best
+  schemes            list the colour schemes themes can be based on
+
+How themes are made and tuned: ${SHINY_HOME}/THEMES.md
+Your themes: ${USER_THEMES}
+Stock themes: ${STOCK_THEMES}
+EOF
+}
+
+# ── theme helpers ────────────────────────────────────────────────────────────
+theme_names() { "$APPLY" --list | awk '{ print ($1=="*") ? $2 : $1 }'; }
+
+swatch() { # swatch HEX → coloured block (nothing when not a terminal)
+  [[ -t 1 || -t 2 ]] || return 0
+  local h="${1#\#}"
+  printf '\033[48;2;%d;%d;%dm      \033[0m' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
+}
+
+pick_theme() { # pick_theme <prompt> → name on stdout
+  local names=() n i choice cur; cur="$(current_theme)"
+  while IFS= read -r n; do names+=("$n"); done < <(theme_names)
+  ((${#names[@]})) || die "No themes found."
+  if command -v fzf >/dev/null 2>&1 && [[ -t 0 ]]; then
+    printf '%s\n' "${names[@]}" | fzf --prompt="$1 › " --height=40% --reverse \
+      --preview "\"$SELF\" theme show {}" --preview-window=right:60% || exit 1
+    return
+  fi
+  for i in "${!names[@]}"; do
+    n="${names[$i]}"
+    printf '  %2d) %-16s' "$((i + 1))" "$n" >&2
+    ( source "$(theme_dir "$n")/palette.sh"; for c in "$BG" "$SURFACE" "$FG" "$ACCENT" "$ACCENT2"; do swatch "$c" >&2; done )
+    [[ "$n" == "$cur" ]] && printf '  %s(current)%s' "$D" "$N" >&2
+    printf '\n' >&2
+  done
+  read -r -p "$1 [1-${#names[@]}]: " choice
+  [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#names[@]} )) || die "No theme picked."
+  printf '%s\n' "${names[$((choice - 1))]}"
+}
+
+slugify() { tr '[:upper:]' '[:lower:]' <<<"$1" | sed -E 's/^shiny-//; s/[^a-z0-9]+/-/g; s/^-+|-+$//g'; }
+
+# ── theme commands ───────────────────────────────────────────────────────────
+theme_new() {
+  local img="" name="" set=0 dest_root="$USER_THEMES" args=()
+  while (($#)); do
+    case "$1" in
+      -i|--image)   img="$2"; shift 2 ;;
+      -n|--name)    name="$2"; shift 2 ;;
+      --scheme|--accent|--accent2) args+=("$1" "$2"); shift 2 ;;
+      --set)        set=1; shift ;;
+      --stock)      dest_root="$STOCK_THEMES"; shift ;;   # for shiny's own stock themes
+      *) die "theme new: unknown option $1" ;;
+    esac
+  done
+  [[ -n "$img" ]] || die "usage: shiny theme new -i /path/to/image [-n name]"
+  [[ -f "$img" ]] || die "No such image: $img"
+  [[ -n "$name" ]] || name="$(slugify "$(basename "${img%.*}")")"
+  [[ "$name" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "Theme names are lowercase letters, numbers and dashes."
+  local dir="${dest_root}/${name}"
+  if [[ -e "$dir" ]]; then
+    [[ -t 0 ]] || die "Theme '${name}' already exists."
+    read -r -p "Theme '${name}' exists — overwrite? [y/N] " a; [[ "$a" == [yY]* ]] || exit 1
+  fi
+  info "Reading colours from $(basename "$img")…"
+  local tmp; tmp="$(mktemp -d)"; trap 'rm -rf "${tmp:-}"; trap - RETURN' RETURN
+  /usr/bin/python3 "$PALETTE" "$img" ${args[@]+"${args[@]}"} --ghostty-out "$tmp/ghostty-theme" > "$tmp/palette.sh"
+  # Wallpaper: JPEG, capped at 5120px on the long edge.
+  local long; long="$(sips -g pixelWidth -g pixelHeight "$img" | awk '/pixel/ {print $2}' | sort -n | tail -1)"
+  if (( long > 5120 )); then
+    sips -Z 5120 -s format jpeg -s formatOptions 90 "$img" --out "$tmp/wallpaper.jpg" >/dev/null
+  else
+    sips -s format jpeg -s formatOptions 92 "$img" --out "$tmp/wallpaper.jpg" >/dev/null
+  fi
+  mkdir -p "$dir"; rm -f "$dir/ghostty-theme"
+  mv -f "$tmp/palette.sh" "$tmp/wallpaper.jpg" "$dir/"
+  [[ -f "$tmp/ghostty-theme" ]] && mv -f "$tmp/ghostty-theme" "$dir/"   # only for --scheme image
+  info "Created ${B}${name}${N} ($(grep -E '^THEME_BASE=' "$dir/palette.sh" | cut -d'"' -f2)) in ${dir}"
+  theme_show "$name"
+  /usr/bin/python3 "$PALETTE" --check "$dir/palette.sh" || warn "Fix the errors above before applying: shiny theme edit ${name}"
+  ( "$APPLY" --warm "$name" >/dev/null 2>&1 & )   # pre-blur Helium's new tab so applying is quick
+  if ((set)); then "$APPLY" "$name"; else printf '\nApply it with: shiny theme set %s\n' "$name"; fi
+}
+
+theme_show() {
+  local name="${1:-$(current_theme)}" dir
+  [[ -n "$name" ]] || die "No theme given and none applied yet."
+  dir="$(theme_dir "$name")" || die "No such theme: $name"
+  ( source "$dir/palette.sh"
+    printf '%s%s%s  %s%s%s\n' "$B" "$name" "$N" "$D" "${THEME_BASE:-custom} · ghostty: ${GHOSTTY_THEME}" "$N"
+    for r in BG BG_DARK SURFACE SELECTION MUTED COMMENT FG FG_DIM ACCENT ACCENT2; do
+      printf '  %s %-10s %s\n' "$(swatch "${!r}")" "$r" "${!r}"
+    done )
+}
+
+theme_edit() {
+  local name="${1:-}"; [[ -n "$name" ]] || name="$(pick_theme "Edit")"
+  theme_dir "$name" >/dev/null || die "No such theme: $name"
+  if ! is_user_theme "$name"; then
+    info "'${name}' is a stock theme — copying it to your themes so updates don't overwrite your edits."
+    mkdir -p "$USER_THEMES"; cp -R "${STOCK_THEMES}/${name}" "${USER_THEMES}/${name}"
+  fi
+  "${VISUAL:-${EDITOR:-nano}}" "${USER_THEMES}/${name}/palette.sh"
+  /usr/bin/python3 "$PALETTE" --check "${USER_THEMES}/${name}/palette.sh" || die "Not applied — fix the errors above (shiny theme edit ${name})."
+  if [[ "$name" == "$(current_theme)" ]]; then "$APPLY" "$name"; fi
+}
+
+theme_remove() {
+  local name="${1:-}"; [[ -n "$name" ]] || name="$(pick_theme "Remove")"
+  if ! is_user_theme "$name"; then
+    theme_dir "$name" >/dev/null && die "'${name}' is a stock theme and ships with shiny — only your own themes can be removed."
+    die "No such theme: $name"
+  fi
+  if [[ -t 0 ]]; then read -r -p "Delete theme '${name}'? [y/N] " a; [[ "$a" == [yY]* ]] || exit 1; fi
+  rm -rf "${USER_THEMES:?}/${name}"
+  info "Removed ${name}."
+  if [[ "$name" == "$(current_theme)" ]]; then
+    if theme_dir "$name" >/dev/null; then "$APPLY" "$name"   # a stock theme of the same name takes over
+    else warn "That was the current theme — pick another: shiny theme set"; fi
+  fi
+}
+
+theme_check() { # theme_check [name|all] — lint palettes; exit 1 if any has errors
+  local name="${1:-$(current_theme)}" n d bad=0
+  [[ -n "$name" ]] || die "usage: shiny theme check [name|all]"
+  if [[ "$name" == all ]]; then
+    while IFS=$'\t' read -r n d; do
+      printf '%s%s%s\n' "$B" "$n" "$N"
+      /usr/bin/python3 "$PALETTE" --check "$d/palette.sh" | sed 's/^/  /' || bad=1
+    done < <(all_themes)
+  else
+    d="$(theme_dir "$name")" || die "No such theme: $name"
+    /usr/bin/python3 "$PALETTE" --check "$d/palette.sh" || bad=1
+  fi
+  return "$bad"
+}
+
+theme_cmd() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    new)      theme_new "$@" ;;
+    set|use|apply)
+              local name="${1:-}"; [[ -n "$name" ]] || name="$(pick_theme "Theme")"
+              "$APPLY" "$name" ;;
+    list|ls)  "$APPLY" --list ;;
+    show)     theme_show "${1:-}" ;;
+    edit)     theme_edit "${1:-}" ;;
+    remove|rm|delete) theme_remove "${1:-}" ;;
+    current)  current_theme ;;
+    reload)   local c; c="$(current_theme)"; [[ -n "$c" ]] || die "No theme applied yet."
+              if [[ -n "${1:-}" ]]; then "$APPLY" --only "$1" "$c"; else "$APPLY" "$c"; fi ;;   # reload [target]
+    check|lint) theme_check "${1:-}" ;;
+    rank)     [[ "${1:-}" == "-i" && -n "${2:-}" ]] || die "usage: shiny theme rank -i IMAGE"
+              /usr/bin/python3 "$PALETTE" "$2" --top 8 ;;
+    schemes)  /usr/bin/python3 -c 'import json,sys
+for s in json.load(open(sys.argv[1]))["schemes"]: print("%-24s %s" % (s["id"], s["name"]))' "${SHINY_HOME}/libexec/schemes.json" ;;
+    --alfred) "$APPLY" --alfred ;;   # used by the Alfred workflow
+    help|-h|--help) help_theme ;;
+    *) die "Unknown theme command: $sub (see: shiny theme help)" ;;
+  esac
+}
+
+# ── other commands ───────────────────────────────────────────────────────────
+install_cli() {
+  # Put `shiny` on PATH: /usr/local/bin if writable, else Homebrew's bin
+  # (Apple Silicon, no sudo), else /usr/local/bin with sudo.
+  local target="${SHINY_HOME}/bin/shiny" dir link
+  for dir in /usr/local/bin /opt/homebrew/bin; do
+    [[ "$(readlink "${dir}/shiny" 2>/dev/null)" == "$target" ]] && return 0
+  done
+  if [[ -w /usr/local/bin ]]; then dir=/usr/local/bin
+  elif [[ -d /opt/homebrew/bin && -w /opt/homebrew/bin ]]; then dir=/opt/homebrew/bin
+  else dir=/usr/local/bin; fi
+  link="${dir}/shiny"
+  if [[ -w "$dir" ]]; then
+    ln -sf "$target" "$link"
+  else
+    info "Linking ${link} (needs your password)"
+    sudo mkdir -p "$dir" && sudo ln -sf "$target" "$link"
+  fi
+  info "Installed ${link} → ${target}"
+}
+
+tui() {
+  [[ -t 0 && -t 1 ]] || { help_top; exit 0; }
+  exec /usr/bin/python3 "${SHINY_HOME}/libexec/tui.py" "$@"
+}
+
+case "${1:-}" in
+  "")      tui ;;
+  tui)     shift; tui "$@" ;;
+  setup)   shift; install_cli; exec /bin/bash "${SHINY_HOME}/setup.sh" "$@" ;;
+  theme|themes) shift; theme_cmd "$@" ;;
+  update)  git -C "$SHINY_HOME" pull --ff-only && install_cli && info "shiny is up to date." ;;
+  install-cli) install_cli ;;
+  version|--version|-v) git -C "$SHINY_HOME" describe --always --dirty 2>/dev/null || echo unknown ;;
+  help|-h|--help) [[ -t 1 ]] && { echo; banner; echo; }; help_top ;;
+  *) die "Unknown command: $1 (see: shiny help)" ;;
+esac
