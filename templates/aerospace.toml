@@ -69,6 +69,17 @@ gaps.outer.bottom =     {{BAR_CLEARANCE}}
     alt-shift-8 = 'move-node-to-workspace 8'
     alt-shift-9 = 'move-node-to-workspace 9'
 
+    # Old Rectangle keys (ctrl+opt), mapped to the nearest tiling equivalent.
+    ctrl-alt-left = 'move left'          # "left half": that side of the layout
+    ctrl-alt-right = 'move right'
+    ctrl-alt-up = 'move up'
+    ctrl-alt-down = 'move down'
+    ctrl-alt-enter = 'fullscreen'        # maximise
+    ctrl-alt-c = 'layout floating'       # centre: float it
+    ctrl-alt-backspace = 'layout tiling' # restore: back into the layout
+    ctrl-alt-period = 'move-node-to-monitor --wrap-around next'
+    ctrl-alt-comma = 'move-node-to-monitor --wrap-around prev'
+
     alt-tab = 'workspace-back-and-forth'
     alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
     alt-shift-semicolon = 'mode service'
