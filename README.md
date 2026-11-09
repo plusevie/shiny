@@ -69,7 +69,7 @@ stock themes live in `themes/`, yours in `~/.config/shiny/themes/` (yours win if
 
 ## windows
 
-[AeroSpace](https://github.com/nikitabobko/AeroSpace) tiles windows (no SIP changes needed). Option is the key: `opt+h/j/k/l` focus, `opt+shift+h/j/k/l` move, `opt+1…9` switch workspace, `opt+shift+1…9` send a window there, `opt+f` fullscreen, `opt+shift+space` float/tile, `opt+/` and `opt+,` change layout. your old Rectangle keys still work where tiling allows: `ctrl+opt+arrows` move a window to that side, `ctrl+opt+return` fullscreen, `ctrl+opt+c` float, `ctrl+opt+delete` tile again, `ctrl+opt+.` / `,` next / previous display. The bar shows workspaces that have windows. Gaps match the bar (`WINDOW_GAP` in `templates/style.sh`); the config is `templates/aerospace.toml`.
+[AeroSpace](https://github.com/nikitabobko/AeroSpace) tiles windows (no SIP changes needed), with its [default shortcuts](https://nikitabobko.github.io/AeroSpace/guide#default-config) on Option: `opt+h/j/k/l` focus, `opt+shift+h/j/k/l` move, `opt+1…9` / `opt+a…z` workspace, `opt+shift+…` send a window there, `opt+/` and `opt+,` layout, `opt+shift+;` service mode (`r` reset layout, `f` float, `opt+shift+h/j/k/l` join into a stack). from the old Rectangle setup: `ctrl+opt+←/→/↑` move a window to that side, `ctrl+opt+return` fullscreen. the bar shows workspaces that have windows. gaps match the bar (`WINDOW_GAP` in `templates/style.sh`); the config is `templates/aerospace.toml`.
 
 ## notes
 

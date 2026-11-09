@@ -1,6 +1,6 @@
 # managed by shiny-theme ({{THEME}}) — edit templates/aerospace.toml in shiny, not this file.
-# AeroSpace: i3-style tiling. Option is the key: opt+h/j/k/l focus, opt+shift+h/j/k/l
-# move, opt+1…9 workspace, opt+shift+1…9 send the window there.
+# AeroSpace: i3-style tiling with AeroSpace's default (Option) shortcuts, plus
+# ctrl+opt+←/→/↑ and ctrl+opt+return from the old Rectangle setup.
 # Docs: https://nikitabobko.github.io/AeroSpace/guide
 config-version = 2
 
@@ -19,7 +19,9 @@ default-root-container-layout = 'tiles'
 default-root-container-orientation = 'auto'
 on-focused-monitor-changed = ['move-mouse monitor-lazy-center']
 automatically-unhide-macos-hidden-apps = false
-persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+persistent-workspaces = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B",
+                         "C", "D", "E", "F", "G", "I", "M", "N", "O", "P", "Q",
+                         "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]
 key-mapping.preset = 'qwerty'
 
 # Same spacing as the bar (templates/style.sh WINDOW_GAP): windows sit WINDOW_GAP
@@ -32,11 +34,10 @@ gaps.outer.top =        {{WINDOW_GAP}}
 gaps.outer.bottom =     {{BAR_CLEARANCE}}
 
 [mode.main.binding]
+    # AeroSpace's default bindings (its default-config.toml), plus the old
+    # Rectangle ctrl+opt keys below.
     alt-slash = 'layout tiles horizontal vertical'
     alt-comma = 'layout accordion horizontal vertical'
-    alt-f = 'fullscreen'
-    alt-shift-space = 'layout floating tiling'
-
     alt-h = 'focus left'
     alt-j = 'focus down'
     alt-k = 'focus up'
@@ -45,11 +46,8 @@ gaps.outer.bottom =     {{BAR_CLEARANCE}}
     alt-shift-j = 'move down'
     alt-shift-k = 'move up'
     alt-shift-l = 'move right'
-
     alt-minus = 'resize smart -50'
     alt-equal = 'resize smart +50'
-    alt-shift-equal = 'balance-sizes'
-
     alt-1 = 'workspace 1'
     alt-2 = 'workspace 2'
     alt-3 = 'workspace 3'
@@ -59,6 +57,28 @@ gaps.outer.bottom =     {{BAR_CLEARANCE}}
     alt-7 = 'workspace 7'
     alt-8 = 'workspace 8'
     alt-9 = 'workspace 9'
+    alt-a = 'workspace A' # In your config, you can drop workspace bindings that you don't need
+    alt-b = 'workspace B'
+    alt-c = 'workspace C'
+    alt-d = 'workspace D'
+    alt-e = 'workspace E'
+    alt-f = 'workspace F'
+    alt-g = 'workspace G'
+    alt-i = 'workspace I'
+    alt-m = 'workspace M'
+    alt-n = 'workspace N'
+    alt-o = 'workspace O'
+    alt-p = 'workspace P'
+    alt-q = 'workspace Q'
+    alt-r = 'workspace R'
+    alt-s = 'workspace S'
+    alt-t = 'workspace T'
+    alt-u = 'workspace U'
+    alt-v = 'workspace V'
+    alt-w = 'workspace W'
+    alt-x = 'workspace X'
+    alt-y = 'workspace Y'
+    alt-z = 'workspace Z'
     alt-shift-1 = 'move-node-to-workspace 1'
     alt-shift-2 = 'move-node-to-workspace 2'
     alt-shift-3 = 'move-node-to-workspace 3'
@@ -68,27 +88,41 @@ gaps.outer.bottom =     {{BAR_CLEARANCE}}
     alt-shift-7 = 'move-node-to-workspace 7'
     alt-shift-8 = 'move-node-to-workspace 8'
     alt-shift-9 = 'move-node-to-workspace 9'
-
-    # Old Rectangle keys (ctrl+opt), mapped to the nearest tiling equivalent.
-    ctrl-alt-left = 'move left'          # "left half": that side of the layout
-    ctrl-alt-right = 'move right'
-    ctrl-alt-up = 'move up'
-    ctrl-alt-down = 'move down'
-    ctrl-alt-enter = 'fullscreen'        # maximise
-    ctrl-alt-c = 'layout floating'       # centre: float it
-    ctrl-alt-backspace = 'layout tiling' # restore: back into the layout
-    ctrl-alt-period = 'move-node-to-monitor --wrap-around next'
-    ctrl-alt-comma = 'move-node-to-monitor --wrap-around prev'
-
+    alt-shift-a = 'move-node-to-workspace A'
+    alt-shift-b = 'move-node-to-workspace B'
+    alt-shift-c = 'move-node-to-workspace C'
+    alt-shift-d = 'move-node-to-workspace D'
+    alt-shift-e = 'move-node-to-workspace E'
+    alt-shift-f = 'move-node-to-workspace F'
+    alt-shift-g = 'move-node-to-workspace G'
+    alt-shift-i = 'move-node-to-workspace I'
+    alt-shift-m = 'move-node-to-workspace M'
+    alt-shift-n = 'move-node-to-workspace N'
+    alt-shift-o = 'move-node-to-workspace O'
+    alt-shift-p = 'move-node-to-workspace P'
+    alt-shift-q = 'move-node-to-workspace Q'
+    alt-shift-r = 'move-node-to-workspace R'
+    alt-shift-s = 'move-node-to-workspace S'
+    alt-shift-t = 'move-node-to-workspace T'
+    alt-shift-u = 'move-node-to-workspace U'
+    alt-shift-v = 'move-node-to-workspace V'
+    alt-shift-w = 'move-node-to-workspace W'
+    alt-shift-x = 'move-node-to-workspace X'
+    alt-shift-y = 'move-node-to-workspace Y'
+    alt-shift-z = 'move-node-to-workspace Z'
     alt-tab = 'workspace-back-and-forth'
     alt-shift-tab = 'move-workspace-to-monitor --wrap-around next'
     alt-shift-semicolon = 'mode service'
 
-# opt+shift+; then a key, for the less common things.
+    ctrl-alt-left = 'move left'      # was Rectangle "left half"
+    ctrl-alt-right = 'move right'
+    ctrl-alt-up = 'move up'
+    ctrl-alt-enter = 'fullscreen'    # was Rectangle "maximise"
+
 [mode.service.binding]
     esc = ['reload-config', 'mode main']
-    r = ['flatten-workspace-tree', 'mode main']           # reset layout
-    f = ['layout floating tiling', 'mode main']           # float / tile this window
+    r = ['flatten-workspace-tree', 'mode main'] # reset layout
+    f = ['layout floating tiling', 'mode main'] # Toggle between floating and tiling layout
     backspace = ['close-all-windows-but-current', 'mode main']
     alt-shift-h = ['join-with left', 'mode main']
     alt-shift-j = ['join-with down', 'mode main']
