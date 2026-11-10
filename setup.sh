@@ -344,6 +344,8 @@ write_hosts() {
 set_theme() {
   # Theme switches only restart what's already running, so start the bar here.
   command -v sketchybar >/dev/null 2>&1 && timeout 60 brew services start sketchybar >/dev/null 2>&1 || true
+  # Alfred Evie: the plain theme `shiny off` switches Alfred to.
+  install_alfred_evie && info "Alfred: Alfred Evie theme installed." || warn "Alfred: open it once, then re-run for the Alfred Evie theme."
   with_timeout 600 "Theme" "${SCRIPT_DIR}/libexec/shiny-apply" "$THEME" \
     || { warn "Theme '${THEME}' didn't fully apply — see above."; return 1; }
 }

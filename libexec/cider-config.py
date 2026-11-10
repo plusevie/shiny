@@ -2,6 +2,8 @@
 """cider-config.py — point Cider's settings (spa-config.yml) at a shiny theme.
 
     cider-config.py <spa-config.yml> <theme.css> <accent #RRGGBB> [api-token]
+    cider-config.py --off <spa-config.yml>   put the settings shiny changed back
+                                             (values from the backup), no custom CSS
 
 With api-token, also registers it as a playback-only token for Cider's local
 API (127.0.0.1:10767), which SketchyBar uses to show what's playing.
@@ -94,7 +96,25 @@ def ensure_token(lines, token):
         lines[j:j] = item
 
 
+def off(cfg):
+    bak = cfg + ".shiny-bak"
+    lines = open(cfg).read().splitlines(keepends=True)
+    old = open(bak).read().splitlines(keepends=True) if os.path.exists(bak) else []
+    for path in list(SETTINGS) + [("visual", "ui_custom", "customAccentColorValue")]:
+        i, k = find_key(lines, path), find_key(old, path)
+        if i is not None and k is not None:
+            lines[i:value_span(lines, i)] = old[k:value_span(old, k)]
+    if find_key(lines, ("visual", "customCSS")) is not None:
+        set_value(lines, ("visual", "customCSS"), '""')
+    tmp = cfg + ".shiny-tmp"
+    with open(tmp, "w") as f:
+        f.writelines(lines)
+    os.replace(tmp, cfg)
+
+
 def main():
+    if sys.argv[1:2] == ["--off"]:
+        return off(sys.argv[2])
     cfg, css_file, accent = sys.argv[1:4]
     token = sys.argv[4] if len(sys.argv) > 4 else None
     bak = cfg + ".shiny-bak"

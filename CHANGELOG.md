@@ -2,6 +2,7 @@
 
 ## unreleased
 
+- `shiny off` / `shiny on`: a temporary stock look (no bar, borders or AeroSpace; menu bar and Dock shown; Rectangle with the old keys), nothing uninstalled
 - AeroSpace tiling (Option key) replaces Rectangle; the bar shows AeroSpace workspaces
 - AeroSpace installs from its own tap (`nikitabobko/tap/aerospace`): plain `aerospace` isn't in Homebrew, so it was skipped
 - Helium theme and the Alfred `theme` workflow install themselves on the first theme apply (no Load unpacked / workflow import)

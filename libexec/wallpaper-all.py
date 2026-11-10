@@ -6,8 +6,10 @@ macOS 14+ keeps a wallpaper per Space (and per display within a Space) in
 setting one (System Events, `wallpaper` CLI) only changes the current Space.
 This takes the newest "Desktop" entry and writes it everywhere, then restarts
 WallpaperAgent so it takes effect. Run right after setting the wallpaper.
+
+    wallpaper-all.py --default   put macOS's own default wallpaper on every Space instead
 """
-import copy, os, plistlib, subprocess
+import copy, datetime, os, plistlib, subprocess, sys
 
 PATH = os.path.expanduser("~/Library/Application Support/com.apple.wallpaper/Store/Index.plist")
 
@@ -31,6 +33,11 @@ def main():
     if not entries:
         raise SystemExit("wallpaper-all: no desktop wallpaper entries found")
     newest = max(entries, key=lambda e: e.get("LastSet") or 0)
+    if "--default" in sys.argv[1:]:
+        newest = copy.deepcopy(newest)
+        newest["Content"] = {"Choices": [{"Configuration": b"", "Files": [], "Provider": "default"}],
+                             "EncodedOptionValues": "$null", "Shuffle": "$null"}
+        newest["LastSet"] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     for slot in desktop_slots(d):
         slot["Desktop"] = copy.deepcopy(newest)
         slot.setdefault("Type", "individual")

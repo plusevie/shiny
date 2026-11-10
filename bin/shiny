@@ -5,6 +5,9 @@
 #   shiny                               open the TUI (theme picker, theme builder)
 #   shiny setup [--yes]                 install apps, defaults, Dock, theme (safe to re-run)
 #   shiny theme <command>               manage themes (see: shiny theme help)
+#   shiny off                           take a break: apps back to their own look, no bar,
+#                                       menu bar + Dock shown, Rectangle instead of AeroSpace
+#   shiny on                            back to the rice (re-applies your theme)
 #   shiny update                        pull the latest shiny and stock themes
 #   shiny version
 #
@@ -286,6 +289,7 @@ case "${1:-}" in
   tui)     shift; tui "$@" ;;
   setup)   shift; install_cli; exec /bin/bash "${SHINY_HOME}/setup.sh" "$@" ;;
   theme|themes) shift; theme_cmd "$@" ;;
+  off|on)  exec "${SHINY_HOME}/libexec/shiny-power" "$1" ;;
   update)  git -C "$SHINY_HOME" pull --ff-only && install_cli && info "shiny is up to date." ;;
   install-cli) install_cli ;;
   version|--version|-v) git -C "$SHINY_HOME" describe --always --dirty 2>/dev/null || echo unknown ;;

@@ -1,0 +1,64 @@
+{
+  "alfredtheme": {
+    "credit": "Evie",
+    "name": "Alfred Evie",
+    "result": {
+      "backgroundSelected": "#358188FF",
+      "iconPaddingHorizontal": 5,
+      "iconSize": 40,
+      "paddingVertical": 3,
+      "roundness": 0,
+      "shortcut": {
+        "color": "#FFFFFF7E",
+        "colorSelected": "#FFFFFFFF",
+        "font": "System",
+        "size": 16
+      },
+      "subtext": {
+        "color": "#FFFFFF7E",
+        "colorSelected": "#FFFFFFCB",
+        "font": "System",
+        "size": 12
+      },
+      "text": {
+        "color": "#FFFFFFCB",
+        "colorSelected": "#FFFFFFFF",
+        "font": "System",
+        "size": 18
+      },
+      "textSpacing": 5
+    },
+    "scrollbar": {
+      "color": "#358188FF",
+      "thickness": 0
+    },
+    "search": {
+      "background": "#0000003E",
+      "backgroundSelected": "#358188FF",
+      "paddingHorizontal": 8,
+      "paddingVertical": 5,
+      "roundness": 0,
+      "spacing": 4,
+      "text": {
+        "color": "#FFFFFFFF",
+        "colorSelected": "#FFFFFFFF",
+        "font": "System Light",
+        "size": 34
+      }
+    },
+    "separator": {
+      "color": "#CBCBCBF3",
+      "thickness": 0
+    },
+    "window": {
+      "blur": 15,
+      "borderColor": "#0000007F",
+      "borderPadding": 0,
+      "color": "#000000C6",
+      "paddingHorizontal": 0,
+      "paddingVertical": 4,
+      "roundness": 12,
+      "width": 559
+    }
+  }
+}

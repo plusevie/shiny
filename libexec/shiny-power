@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+#
+# shiny-power — turn the rice off for a while, and back on. Nothing is
+# uninstalled: autolaunches are switched off and configs stay in place.
+#
+#   shiny off   apps back to their own look (Helium: its default grey theme),
+#               default light icons, no bar or borders, menu bar always shown,
+#               normal Dock, Rectangle (old Ctrl+Option keys) instead of AeroSpace
+#   shiny on    everything back as it was, current theme re-applied
+#
+# What `off` changed is remembered in ~/.config/shiny/off.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SHINY_HOME="$ROOT"
+# shellcheck source=lib.sh
+source "${ROOT}/libexec/lib.sh"
+
+OFF_STATE="${STATE_DIR}/off"
+HELIUM_PREFS="${HOME}/Library/Application Support/net.imput.helium/Default/Preferences"
+GUI="gui/$(id -u)"
+OFF_DOCK_SIZE=42        # Dock icon size while off
+ICONS_DEFAULT_LIGHT=1   # SkyLight icon appearance theme (7 = tinted light), see appearance.m
+
+[[ "$(uname -s)" == "Darwin" ]] || die "macOS only."
+if ! command -v brew >/dev/null 2>&1; then
+  for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do [[ -x "$b" ]] && eval "$("$b" shellenv)" && break; done
+fi
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+managed() { [[ -f "$1" ]] && grep -q 'managed by shiny-theme' "$1"; }
+quit_app() { osascript -e 'with timeout of 3 seconds' -e "tell application \"$1\" to quit" -e 'end timeout' >/dev/null 2>&1 || true; }
+quit_wait() { local i; quit_app "$1"; for i in {1..40}; do app_running "$1" || return 0; sleep 0.25; done; return 1; }
+
+login_item_add() { # login_item_add <app path> — legacy login item, via System Events
+  local name; name="$(basename "$1" .app)"
+  osascript -e "tell application \"System Events\" to get the name of every login item" 2>/dev/null | grep -qw "$name" && return 0
+  osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$1\", hidden:false}" >/dev/null 2>&1
+}
+login_item_remove() { # login_item_remove <name>
+  osascript -e "tell application \"System Events\" to if exists login item \"$1\" then delete login item \"$1\"" >/dev/null 2>&1 || true
+}
+
+agent_stop()  { launchctl bootout "${GUI}/$1" 2>/dev/null || true; launchctl disable "${GUI}/$1"; }
+agent_start() { # agent_start <label> — only if shiny installed it
+  local plist="${HOME}/Library/LaunchAgents/$1.plist"
+  [[ -f "$plist" ]] || return 0
+  launchctl enable "${GUI}/$1"
+  launchctl bootstrap "$GUI" "$plist" 2>/dev/null || launchctl kickstart -k "${GUI}/$1" >/dev/null 2>&1 || true
+}
+
+# Settings `off` changes are saved as domain|key|type|value (empty type = wasn't set).
+save_pref() {
+  local d="$1" k="$2" v t
+  if v="$(defaults read "$d" "$k" 2>/dev/null)"; then
+    t="$(defaults read-type "$d" "$k" | awk '{print $NF}')"
+    printf 'pref|%s|%s|%s|%s\n' "$d" "$k" "$t" "$v" >> "$OFF_STATE"
+  else
+    printf 'pref|%s|%s||\n' "$d" "$k" >> "$OFF_STATE"
+  fi
+}
+restore_prefs() {
+  local kind d k t v
+  while IFS='|' read -r kind d k t v; do
+    [[ "$kind" == pref ]] || continue
+    if [[ -z "$t" ]]; then defaults delete "$d" "$k" 2>/dev/null || true; continue; fi
+    [[ "$t" == boolean ]] && { [[ "$v" == 1 ]] && v=true || v=false; }
+    defaults write "$d" "$k" "-$t" "$v"
+  done < "$OFF_STATE"
+}
+state_get() { awk -F'|' -v k="$1" '$1 == k { print $2; exit }' "$OFF_STATE"; }
+
+helium_restores_tabs() {
+  [[ -f "$HELIUM_PREFS" ]] && /usr/bin/python3 -c 'import json, sys
+sys.exit(0 if json.load(open(sys.argv[1])).get("session", {}).get("restore_on_startup") == 1 else 1)' "$HELIUM_PREFS" 2>/dev/null
+}
+helium_theme() { # helium_theme get | set <json> — Preferences' extensions.theme (Helium must be closed to set)
+  /usr/bin/python3 - "$HELIUM_PREFS" "$@" <<'PY'
+import json, sys
+path, op = sys.argv[1], sys.argv[2]
+p = json.load(open(path))
+if op == "get":
+    print(json.dumps(p.get("extensions", {}).get("theme", {})))
+else:
+    p.setdefault("extensions", {})["theme"] = json.loads(sys.argv[3])
+    json.dump(p, open(path, "w"), separators=(",", ":"))
+PY
+}
+helium_switch() { # helium_switch <theme json> [--no-reopen] — swap Helium's theme, restarting it if that keeps your tabs
+  [[ -f "$HELIUM_PREFS" ]] || return 0
+  local was=0; HELIUM_WAS_OPEN=0
+  if app_running Helium; then
+    if ! helium_restores_tabs && [[ "${SHINY_RESTART_HELIUM:-0}" != 1 ]]; then
+      warn "Helium: open and won't restore your tabs, so it wasn't restarted — quit it, then run: shiny ${MODE} (again)"
+      return 1
+    fi
+    quit_wait Helium || { warn "Helium didn't quit — theme not switched."; return 1; }
+    was=1
+  fi
+  helium_theme set "$1"
+  HELIUM_WAS_OPEN=$was
+  [[ "${2:-}" == --no-reopen ]] || { ((was)) && open -a Helium; }
+  return 0
+}
+
+trap 'curtain_down' EXIT
+
+# ── off ──────────────────────────────────────────────────────────────────────
+shiny_off() {
+  if [[ -f "$OFF_STATE" ]]; then   # already off: just retry what can be skipped (Helium)
+    helium_switch '{"id":""}' && info "Helium: its default theme. shiny is off (shiny on to turn it back on)."
+    return 0
+  fi
+  local theme; theme="$(current_theme)"
+  mkdir -p "$STATE_DIR"; : > "$OFF_STATE"
+  rm -f "${STATE_DIR}/helium-pending"   # a skipped `shiny on` Helium step no longer applies
+  info "Turning shiny off…"
+  curtain_up "Turning shiny off…"
+
+  # What to put back later.
+  local dk
+  for dk in orientation tilesize autohide autohide-delay autohide-time-modifier; do save_pref com.apple.dock "$dk"; done
+  save_pref NSGlobalDomain _HIHideMenuBar
+  save_pref com.apple.controlcenter AutoHideMenuBarOption
+  local tool icons=""
+  tool="$(native_tool appearance Foundation CoreGraphics)" && icons="$("$tool" --read | awk '{print $3}' | tr -d ,)"
+  printf 'icons|%s\n' "$icons" >> "$OFF_STATE"
+  [[ -f "$HELIUM_PREFS" ]] && printf 'helium|%s\n' "$(helium_theme get)" >> "$OFF_STATE"
+
+  # Windows: AeroSpace out (its login item too), Rectangle in.
+  curtain_say "Swapping AeroSpace for Rectangle…"
+  login_item_remove AeroSpace
+  pgrep -xq AeroSpace && { quit_app AeroSpace; sleep 1; pkill -x AeroSpace 2>/dev/null || true; }
+  if [[ -d /Applications/Rectangle.app ]]; then
+    "${ROOT}/libexec/rectangle-config" >/dev/null && login_item_add /Applications/Rectangle.app \
+      && info "Windows: AeroSpace stopped, Rectangle running (Ctrl+Option keys)." || warn "Couldn't set up Rectangle."
+  else
+    warn "Rectangle isn't installed (brew install --cask rectangle) — no window snapping while off."
+  fi
+
+  curtain_say "Stopping the bar and borders…"
+  # Bar + borders + Fastmail injector: stopped and kept from starting at login.
+  brew services stop sketchybar >/dev/null 2>&1 || true; pkill -x sketchybar 2>/dev/null || true
+  local fm=0; app_running Fastmail && fm=1
+  agent_stop shiny.borders; brew services stop borders >/dev/null 2>&1 || true; pkill -x borders 2>/dev/null || true
+  agent_stop shiny.fastmail
+  ((fm)) && { sleep 2; app_running Fastmail || open -a Fastmail; }
+  info "SketchyBar, borders, Fastmail theming: stopped."
+
+  # Menu bar always shown; Dock at the bottom, default size, always there.
+  defaults write NSGlobalDomain _HIHideMenuBar -bool false
+  defaults write com.apple.controlcenter AutoHideMenuBarOption -int 3   # Never
+  defaults delete com.apple.dock orientation 2>/dev/null || true
+  defaults write com.apple.dock tilesize -int "$OFF_DOCK_SIZE"
+  defaults write com.apple.dock autohide -bool false
+  defaults delete com.apple.dock autohide-delay 2>/dev/null || true
+  defaults delete com.apple.dock autohide-time-modifier 2>/dev/null || true
+  info "Menu bar always shown; Dock at the bottom."
+
+  # Looks: every app back to its own.
+  curtain_say "Putting apps back to their own look…"
+  if [[ -n "${tool:-}" ]]; then
+    "$tool" --accent 99 --highlight default --tint default --icons "$ICONS_DEFAULT_LIGHT" || warn "macOS: couldn't reset appearance."
+  fi
+  info "macOS: multicolour accent, default highlight, default light icons."
+
+  local g="${HOME}/.config/ghostty/config"
+  if managed "$g"; then
+    cp -f "${ROOT}/templates/ghostty-off.conf" "$g"   # Apple System Colors, light + dark
+    app_running Ghostty && osascript -e 'tell application "Ghostty"' \
+      -e 'if (count terminals) > 0 then perform action "reload_config" on first terminal' -e 'end tell' >/dev/null 2>&1 || true
+    info "Ghostty: Apple System Colors (follows light/dark mode)."
+  fi
+
+  local prefs p
+  prefs="$(alfred_prefs_dir)"
+  if install_alfred_evie; then
+    for p in "${prefs}"/preferences/local/*/appearance/prefs.plist; do
+      [[ -f "$p" ]] || continue
+      plutil -replace darkthemeuid  -string "$ALFRED_EVIE_UID" "$p"
+      plutil -replace lightthemeuid -string "$ALFRED_EVIE_UID" "$p"
+    done
+    # Restarted (not just "set theme"): it caches app icons in the old tint.
+    app_running "Alfred 5" && { curtain_say "Restarting Alfred…"; quit_wait "Alfred 5"; open -a "Alfred 5"; }
+  fi
+  local bc="${HOME}/Library/Application Support/BeeperTexts/custom.css"
+  if managed "$bc"; then
+    # Marked as ours, so `shiny on` doesn't back it up as your own.
+    { echo '/* managed by shiny-theme (off) — `shiny on` puts the themed CSS back */'; [[ -f "${bc}.bak" ]] && cat "${bc}.bak"; } > "${bc}.tmp"
+    mv -f "${bc}.tmp" "$bc"
+    app_running "Beeper Desktop" && { quit_wait "Beeper Desktop"; open -a "Beeper Desktop"; }
+  fi
+
+  local cc="${HOME}/Library/Application Support/sh.cider.genten/spa-config.yml" cw=0
+  if [[ -f "$cc" && -f "${cc}.shiny-bak" ]]; then
+    app_running Cider && { cw=1; quit_wait Cider || warn "Cider didn't quit — skipped."; }
+    app_running Cider || /usr/bin/python3 "${ROOT}/libexec/cider-config.py" --off "$cc" || warn "Cider: couldn't reset."
+    ((cw)) && open -a Cider
+  fi
+
+  curtain_say "Restarting Helium…"
+  helium_switch '{"id":""}' && info "Helium: its default theme."
+  curtain_say "Almost done…"
+  /usr/bin/python3 "${ROOT}/libexec/wallpaper-all.py" --default || warn "Couldn't reset the wallpaper."
+  info "Alfred (Alfred Evie), Beeper, Cider, wallpaper: back to their defaults."
+
+  killall Dock NotificationCenter WindowManager ControlCenter SystemUIServer Finder 2>/dev/null || true
+  # Rectangle reads the screen layout once at launch: restart it now the menu
+  # bar and Dock have moved, or it leaves no gaps against them.
+  if app_running Rectangle; then sleep 1; quit_wait Rectangle && open -a Rectangle; fi
+  curtain_down 1   # let the Dock, menu bar and relaunched apps draw
+  info "${B}shiny is off.${N} Back on with: shiny on${theme:+ (re-applies ${theme})}"
+}
+
+# ── on ───────────────────────────────────────────────────────────────────────
+shiny_on() {
+  local pending="${STATE_DIR}/helium-pending"
+  if [[ ! -f "$OFF_STATE" ]]; then   # already on: just retry Helium if it was skipped
+    [[ -f "$pending" ]] || die "shiny isn't off."
+    helium_switch "$(<"$pending")" && rm -f "$pending" && info "Helium: shiny's theme is back."
+    return 0
+  fi
+  local theme; theme="$(current_theme)"; [[ -n "$theme" ]] || theme=solarflare
+  info "Turning shiny on…"
+
+  restore_prefs   # Dock, menu bar
+
+  # Windows: Rectangle out, AeroSpace back (it re-adds its own login item: start-at-login).
+  login_item_remove Rectangle
+  defaults write com.knollsoft.Rectangle launchOnLogin -bool false
+  app_running Rectangle && quit_app Rectangle
+  [[ -d /Applications/AeroSpace.app ]] && open -a AeroSpace
+
+  brew services start sketchybar >/dev/null 2>&1 || true
+  agent_start shiny.borders
+  agent_start shiny.fastmail
+
+  local icons tool; icons="$(state_get icons)"
+  if [[ -n "$icons" ]] && tool="$(native_tool appearance Foundation CoreGraphics)"; then "$tool" --icons "$icons" || true; fi
+
+  local h; h="$(state_get helium)"
+  HELIUM_WAS_OPEN=0
+  if [[ -n "$h" && "$h" != "{}" ]]; then
+    helium_switch "$h" --no-reopen || printf '%s\n' "$h" > "$pending"   # reopened after the theme is written
+  fi
+
+  rm -f "$OFF_STATE"
+  "${ROOT}/libexec/shiny-apply" "$theme"   # colours, wallpaper, configs; restarts Dock & co.
+  ((HELIUM_WAS_OPEN)) && open -a Helium
+  info "${B}shiny is on.${N}"
+}
+
+MODE="${1:-}"
+case "$MODE" in
+  off) shiny_off ;;
+  on)  shiny_on ;;
+  *)   awk 'NR>2 && /^#/ {sub(/^# ?/, ""); print; next} NR>2 {exit}' "${BASH_SOURCE[0]}"; exit 2 ;;
+esac

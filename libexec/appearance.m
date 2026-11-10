@@ -1,7 +1,8 @@
 // appearance.m — set macOS accent, text highlight and icon tint the way
 // System Settings does, so running apps / Dock / widgets update live.
 //
-//   appearance [--dark] [--accent N] [--highlight "r g b"] [--tint "r g b a"]
+//   appearance [--dark] [--accent N] [--highlight "r g b"|default] [--tint "r g b a"|default] [--icons N]
+//              --icons: icon & widget style, 1 = default light, 7 = tinted light (observed on macOS 27)
 //   appearance --read
 //
 // `defaults write` alone only changes the stored value: nothing is told.
@@ -21,6 +22,7 @@
 @interface SLSIconAppearanceConfiguration : NSObject
 + (instancetype)fetchCurrentIconAppearanceConfiguration;
 - (unsigned)iconAppearanceTheme;
+- (void)setIconAppearanceTheme:(unsigned)theme;
 - (unsigned)iconTintColorName;
 - (void)setIconTintColorName:(unsigned)name;
 - (CGColorRef)otherIconTintColor;
@@ -79,6 +81,19 @@ int main(int argc, char **argv) {
         int n = atoi(v);
         setGlobal(@"AppleAccentColor", n == 99 ? nil : @(n));   // 99 = multicolour (key removed)
         colours = YES;
+      } else if ([a isEqual:@"--highlight"] && !strcmp(v, "default")) {
+        setGlobal(@"AppleHighlightColor", nil);   // back to "Accent colour"
+        colours = YES;
+      } else if ([a isEqual:@"--tint"] && !strcmp(v, "default")) {
+        SLSIconAppearanceConfiguration *c = [cfg fetchCurrentIconAppearanceConfiguration];
+        if (!c) { fprintf(stderr, "appearance: no icon appearance configuration\n"); return 1; }
+        [c setIconTintColorName:0];   // what a fresh configuration starts with (no custom tint)
+        [c save];
+      } else if ([a isEqual:@"--icons"]) {
+        SLSIconAppearanceConfiguration *c = [cfg fetchCurrentIconAppearanceConfiguration];
+        if (!c) { fprintf(stderr, "appearance: no icon appearance configuration\n"); return 1; }
+        [c setIconAppearanceTheme:(unsigned)atoi(v)];
+        [c save];
       } else if ([a isEqual:@"--highlight"]) {
         NSArray *f = floats(v, 3);
         setGlobal(@"AppleHighlightColor", [NSString stringWithFormat:@"%.6f %.6f %.6f Other",

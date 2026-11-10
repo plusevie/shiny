@@ -41,7 +41,12 @@ shiny theme check [name|all]  # lint a palette (contrast, missing roles)
 shiny theme reload [target] # re-apply the current theme, or one app of it
 shiny theme rank -i img     # which colour schemes fit an image
 shiny theme schemes         # schemes themes can be based on
+
+shiny off                   # take a break from the rice (see below)
+shiny on                    # and back
 ```
+
+**`shiny off`** is temporary and uninstalls nothing: apps go back to their own look (macOS accent/highlight, default light icons, wallpaper, beeper, cider, fastmail, helium's own grey theme; ghostty gets Apple System Colors for light and dark mode, alfred gets *Alfred Evie*: Alfred Dark 2's shape in the original Alfred Dark colours, `alfred/alfred-evie.json`, installed by `shiny setup`), all behind the loading curtain, sketchybar, borders and AeroSpace are stopped and taken off login, the menu bar is always shown, the Dock is back at the bottom (size 42, autohide off), and Rectangle runs with the old Magnet-style `ctrl+opt` keys (`libexec/rectangle-config`). **`shiny on`** puts all of that back and re-applies your theme.
 
 ## themes
 

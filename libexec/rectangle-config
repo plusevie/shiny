@@ -1,0 +1,51 @@
+#!/bin/bash
+# rectangle-config — Rectangle window snapping, set up to match my old Magnet
+# layout (all Ctrl+Option). Used by `shiny off` (no bar then, so no room left for one).
+set -euo pipefail
+
+D=com.knollsoft.Rectangle
+MOD=786432            # Ctrl+Option (NSEvent modifier flags: ctrl 1<<18 | option 1<<19)
+# Spacing lives in templates/style.sh, shared with the bar.
+WINDOW_GAP=10
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/templates/style.sh"
+GAP="$WINDOW_GAP"                              # between windows and at the screen edges
+
+key() { defaults write "$D" "$1" -dict keyCode -int "$2" modifierFlags -int "$MOD"; }
+
+osascript -e 'quit app "Rectangle"' >/dev/null 2>&1 || true
+
+# action             keyCode   key
+key leftHalf           123   # ←
+key rightHalf          124   # →
+key topHalf            126   # ↑
+key bottomHalf         125   # ↓
+key topLeft             33   # [
+key topRight            30   # ]
+key bottomLeft          41   # ;
+key bottomRight         39   # '
+key firstThird          32   # U
+key centerThird         34   # I
+key lastThird           31   # O
+key firstTwoThirds      38   # J
+key centerTwoThirds     40   # K
+key lastTwoThirds       37   # L
+key topLeftSixth        15   # R
+key topCenterSixth      17   # T
+key topRightSixth       16   # Y
+key bottomLeftSixth      3   # F
+key bottomCenterSixth    5   # G
+key bottomRightSixth     4   # H
+key nextDisplay         47   # .
+key previousDisplay     43   # ,
+key maximize            36   # Return
+key center               8   # C
+key restore             51   # Delete
+
+defaults write "$D" gapSize -float "$GAP"
+defaults delete "$D" screenEdgeGapBottom 2>/dev/null || true   # was room for SketchyBar
+defaults write "$D" windowSnapping -int 1          # drag to edges to snap, like Magnet
+defaults write "$D" launchOnLogin -bool false        # `shiny off` adds/removes its login item itself
+defaults write "$D" alternateDefaultShortcuts -bool true   # skip the first-run shortcut picker
+defaults write "$D" SUHasLaunchedBefore -bool true
+
+open -a Rectangle
