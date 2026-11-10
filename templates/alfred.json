@@ -2,6 +2,7 @@
   "alfredtheme" : {
     "name" : "{{THEME}}",
     "credit" : "shiny",
+    "visualEffectMode" : 1,
     "result" : {
       "textSpacing" : 5,
       "subtext" : { "size" : 12, "colorSelected" : "{{ACCENT}}FF", "font" : "System", "color" : "{{COMMENT}}FF" },
@@ -20,7 +21,7 @@
       "spacing" : 4,
       "text" : { "size" : 34, "colorSelected" : "{{FG}}FF", "font" : "System Light", "color" : "{{FG}}FF" },
       "background" : "{{BG_DARK}}00",
-      "roundness" : 0,
+      "roundness" : 8,
       "paddingVertical" : 5
     },
     "scrollbar" : { "color" : "{{MUTED}}80", "thickness" : 0 },
